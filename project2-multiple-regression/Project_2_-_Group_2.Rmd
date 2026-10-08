@@ -1,0 +1,1345 @@
+---
+title: "ECON622 Project 2: Multiple Linear Regression"
+author: "Group 2 - Gong, Rao, Singh, Thomas"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    toc_depth: 2
+header-includes:
+  - \usepackage{tcolorbox}      
+  - \usepackage{adjustbox}      
+  - \usepackage{xcolor}         
+  - \usepackage{booktabs}       
+toc-title: "Table of Contents"
+---
+
+\newpage
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	fig.align = "center",
+	fig.height = 5,
+	fig.width = 7,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# 1. Introduction
+
+This study examines how multiple financial and macroeconomic variables (X and confounding variables) influence the U.S. Unemployment rate (Y variable) from **January 1956 to December 2023**, with a focus on testing whether changes in financial conditions, inflation, production, and external investment trends can help anticipate fluctuations in unemployment.
+
+
+## a. Variable Choice
+
+**Dependent variable**: Unemployment rate (`UNEMP`)  
+**Independent variables**:  
+- S&P500 returns (`SP500`)  
+- Federal Funds Rate (`FEDFUNDS`)  
+- U.S. FDI inflows (`FDI`)  
+- Consumer Price Index (`CPI`)  
+- Industrial Production (`INDPRO`)  
+- Gold prices (`GOLD`)
+
+Unemployment is used as the key macroeconomic indicator of labor market conditions. Each explanatory variable represents a distinct yet interconnected dimension of the economy:
+
+- **S&P500 returns** capture stock market performance and investor expectations,  
+- **Federal Funds Rate** reflects the stance of U.S. monetary policy,  
+- **U.S. FDI inflows** indicate external investor confidence and cross-border capital movements,  
+- **CPI** measures inflationary pressures and cost-of-living dynamics,  
+- **Industrial Production** tracks real economic output and cyclical fluctuations, and  
+- **Gold Prices** serve as a barometer of economic uncertainty and safe-haven demand.
+
+By examining these variables together, the study aims to identify whether stress signals in financial, monetary, and real-sector indicators precede or coincide with increases in unemployment—often a leading sign of economic downturns or recessions.
+
+\newpage
+**Time Period**: January 1956 to December 2023 (68 years)
+
+
+**Why this period**:  
+
+This period captures major phases of U.S. economic history, including post-war expansion, the 1970s oil crises, the dot-com collapse (2001), the Global Financial Crisis (2008–2009), the COVID-19 recession (2020), and the post-pandemic monetary tightening cycle (2022–2023).
+
+The dataset offers over **900  observations**, providing both historical depth and modern economic relevance to study the dynamic relationship between financial markets, macroeconomic policy, and labor market performance.  
+
+
+
+
+**Project Plan**:  
+
+This extended analysis builds upon **Project 1**, which modeled the U.S. unemployment rate as a function of **S&P500 returns** using a simple linear regression framework:  
+
+$$
+\text{unemp}_t = \beta_0 + \beta_1 \times \text{SP500}_{t-4} + u_t
+$$
+
+In **Project 2**, the model is expanded to a **multiple regression framework** that incorporates six explanatory variables representing financial, monetary, and real economic conditions:  
+
+
+$$
+\begin{aligned}
+\text{UNEMP.FG}_t &= \beta_0 
++ \beta_1 \times \text{SP500.G}_{t-4} 
++ \beta_2 \times \text{FEDFUNDS.G}_{t-4} \\
+&+ \beta_3 \times \text{FDI.G}_{t-4} 
++ \beta_4 \times \text{CPI.G}_{t-4} \\
+&+ \beta_5 \times \text{INDPRO.G}_{t-4} 
++ \beta_6 \times \text{GOLD.G}_{t-4} 
++ u_t
+\end{aligned}
+$$
+
+This expanded model allows us to examine how movements in financial markets, monetary policy, inflation, production activity, and investment flows collectively influence changes in unemployment over time.
+
+## b. Literature Review
+
+The connection between financial stress, monetary policy, and unemployment has been widely documented in macroeconomic and empirical finance research. Each variable chosen has a strong theoretical justification and empirical precedent.
+
+###  S&P500 Returns (SP500)
+
+*Theoretical Foundation*:
+Stock market declines often precede economic recessions as investors anticipate deteriorating corporate earnings, reduced consumer spending, and tightening credit conditions. The wealth effect and confidence channels provide theoretical mechanisms through which stock market performance influences broader economic activity and Monthly unemployment rate.
+
+*Empirical Evidence*:
+Green A, et al. (2024)\textsuperscript{[\hyperlink{ref1}{1}]}, in their study “Identifying Economic Factors Affecting Unemployment Rates”, examined nearly two decades of U.S. data to understand how macroeconomic indicators influence labor market conditions. Using regression analysis, they found that the  S&P500 index is negatively correlated with the unemployment rate, meaning that periods of strong stock market performance are typically accompanied by lower unemployment.
+
+### Federal Funds Rate (FEDFUNDS)
+
+*Theoretical Evidence*:
+The Fed Funds Rate reflects the stance of U.S. monetary policy. Higher rates tighten financial conditions, increase borrowing costs, and eventually reduce investment and hiring, thereby raising unemployment. Lower rates, conversely, stimulate spending and job creation.
+
+*Empirical Evidence*:
+Romer and Romer (2004)\textsuperscript{[\hyperlink{ref2}{2}]} and Bernanke & Blinder (1992)\textsuperscript{[\hyperlink{ref3}{3}]} show that contractionary monetary policy shocks have statistically significant effects on output and employment, with the full impact on unemployment typically observed after 6–12 months.
+
+### Foreign Direct Investment (FDI)
+
+*Theoretical Evidence*:  
+Foreign Direct Investment (FDI) represents long-term cross-border capital inflows that contribute to domestic economic growth, technology transfer, and employment generation. Higher FDI inflows typically signal investor confidence, stimulate business expansion, and support job creation. Conversely, a decline in FDI may reflect weakening global sentiment or policy uncertainty, which can reduce investment and hiring.
+
+*Empirical Evidence*:  
+Studies such as Alfaro (2003)\textsuperscript{[\hyperlink{ref4}{4}]} and Borensztein et al. (1998)\textsuperscript{[\hyperlink{ref5}{5}]} find that FDI positively influences economic growth and employment, particularly in economies with well-developed financial markets. Lower FDI inflows are often associated with slower output growth and a gradual rise in unemployment.
+
+### Consumer Price Index (CPI)
+
+*Theoretical Evidence*:  
+The Consumer Price Index (CPI) measures overall inflation and cost-of-living changes. Moderate inflation is consistent with healthy economic activity, but high inflation can erode purchasing power, reduce real wages, and prompt monetary tightening, all of which can increase unemployment in the medium term. Deflationary pressures, on the other hand, can discourage spending and investment, also leading to job losses.
+
+*Empirical Evidence*:  
+Phillips (1958)\textsuperscript{[\hyperlink{ref6}{6}]} and Samuelson & Solow (1960)\textsuperscript{[\hyperlink{ref7}{7}]} highlight the short-run trade-off between inflation and unemployment, known as the Phillips Curve. More recent evidence from Ball & Mankiw (2002)\textsuperscript{[\hyperlink{ref8}{8}]} suggests that inflation shocks and inflation uncertainty can have lagged adverse effects on labor market conditions.
+
+### Industrial Production (INDPRO)
+
+*Theoretical Evidence*:  
+Industrial Production serves as a key indicator of real economic activity. A rise in production typically signals strong demand and business confidence, leading to higher employment. Conversely, declining industrial output reflects weakening economic conditions and is often followed by job cuts and rising unemployment.
+
+*Empirical Evidence*:  
+Bernanke & Blinder (1992)\textsuperscript{[\hyperlink{ref9}{9}]} and Stock & Watson (1999)\textsuperscript{[\hyperlink{ref10}{10}]} find that fluctuations in industrial production closely track the business cycle, with downturns in output leading increases in unemployment. Empirical studies consistently show a strong negative correlation between industrial activity and unemployment rates.
+
+### Gold Prices (GOLD)
+
+*Theoretical Evidence*:
+Gold serves as a safe-haven asset. Rising gold prices typically reflect investor pessimism and risk aversion, often preceding or coinciding with economic downturns. High gold prices thus signal deteriorating confidence in real economic activity.
+
+*Empirical Evidence*:
+Research from the Chicago Federal Reserve (2021)\textsuperscript{[\hyperlink{ref11}{11}]} and Sharma et al. (2016)\textsuperscript{[\hyperlink{ref12}{12}]} find that gold prices move counter-cyclically, rising during recessions or heightened uncertainty periods — consistent with gold’s role as a macro-sentiment indicator.
+
+#### **COVID-19 Period as a Case Study:**
+
+The COVID-19 pandemic period (2020-2021) represents a particularly interesting case within our sample. Unlike typical recessions driven by financial or economic imbalances, the COVID-19 recession was caused by an external public health crisis that led to unprecedented government-mandated economic shutdowns.\
+
+
+
+# 2. Data 
+
+```{r load_libs, echo=TRUE}
+library(tidyverse)
+library(readr)
+library(knitr)
+library(ggplot2)
+library(zoo)
+library(lubridate)
+library(kableExtra)
+library(lmtest)
+library(sandwich)
+library(broom)
+library(kableExtra)
+library(dplyr)
+library(rlang)
+library(patchwork)
+library(grid)
+```
+
+## a. Data Sources
+
+**Files**: SP500.csv, FEDFUNDS.csv, FDI.csv, CPI.csv, INDPRO.csv, GOLD.csv, UNRATE.csv  
+**Period**: January 1956 to December 2023  
+**Frequency**: Combination of Monthly and Yearly  
+
+**Variables**:  
+`SP500.G`:  S&P500 returns (X1)  
+`FEDFUNDS.G`: Federal Funds Rate (Z1)  
+`FDI.G`: U.S. Foreign Direct Investment inflows (Z2)  
+`CPI.G`: Consumer Price Index (Z3)  
+`INDPRO.G`: Industrial Production Index (Z4)  
+`GOLD.G`: Gold Prices (Z5)  
+`UNEMP.FG`:Unemployment Rate (Y variable)  
+
+```{r load data, include=FALSE}
+#Load data
+sp500_raw<- read_csv("SP500.csv")
+unemp_raw <- read_csv("unemp.csv")
+FEDFUNDS_raw <- read.csv("FEDFUNDS.csv")
+FDI_raw <- read.csv("FDI.csv")
+CPI_raw <- read.csv("CPI.csv")
+INDPRO_raw <- read.csv("INDPRO.csv")
+GOLD_raw <- read.csv("GOLD.csv")
+```
+
+```{r clean-data, echo=TRUE}
+# Data Management
+
+# quarterly data
+FDI <- ts(FDI_raw$FDI, start=c(1952,1), end=c(2024,1), frequency=4)
+
+# monthly data
+sp500 <- ts(sp500_raw$sp500, start=c(1927,12), end=c(2025,9), frequency=12)
+unemp <- ts(unemp_raw$unemp, start=c(1948,1), end=c(2025,8), frequency=12)
+FEDFUNDS <- ts(FEDFUNDS_raw$FEDFUNDS, start=c(1954,7), end=c(2025,9), frequency=12)
+CPI <- ts(CPI_raw$CPI, start=c(1947,1), end=c(2025,8), frequency=12)
+INDPRO <- ts(INDPRO_raw$INDPRO, start=c(1919,1), end=c(2025,8), frequency=12)
+GOLD <- ts(GOLD_raw$GOLD, start=c(1915,1), end=c(2025,10), frequency=12)
+
+# Aggregating data
+
+# --- Step 1: Determine overlapping period ---
+monthly_starts <- sapply(list(sp500, unemp, FEDFUNDS, CPI, INDPRO, GOLD), function(x) start(x)[1] + (start(x)[2]-1)/12)
+monthly_ends   <- sapply(list(sp500, unemp, FEDFUNDS, CPI, INDPRO, GOLD), function(x) end(x)[1] + (end(x)[2]-1)/12)
+quarterly_starts <- start(FDI)[1] + (start(FDI)[2]-1)/4
+quarterly_ends   <- end(FDI)[1] + (end(FDI)[2]-1)/4
+
+overlap_start <- max(c(monthly_starts, quarterly_starts))
+overlap_end   <- min(c(monthly_ends, quarterly_ends))
+
+# Convert back to ts indexing
+start_year <- floor(overlap_start)
+start_month <- round(1 + (overlap_start - start_year) * 12)
+start_quarter <- round(1 + (overlap_start - start_year) * 4)
+
+end_year <- floor(overlap_end)
+end_month <- round(1 + (overlap_end - end_year) * 12)
+end_quarter <- round(1 + (overlap_end - end_year) * 4)
+
+# --- Step 2: Trim all series ---
+sp500     <- window(sp500, start=c(start_year, start_month), end=c(end_year, end_month))
+unemp     <- window(unemp, start=c(start_year, start_month), end=c(end_year, end_month))
+FEDFUNDS  <- window(FEDFUNDS, start=c(start_year, start_month), end=c(end_year, end_month))
+CPI       <- window(CPI, start=c(start_year, start_month), end=c(end_year, end_month))
+INDPRO    <- window(INDPRO, start=c(start_year, start_month), end=c(end_year, end_month))
+GOLD      <- window(GOLD, start=c(start_year, start_month), end=c(end_year, end_month))
+FDI       <- window(FDI, start=c(start_year, start_quarter), end=c(end_year, end_quarter))
+
+
+# --- Step 3: Aggregate monthly to quarterly (keep same names) ---
+sp500    <- aggregate.ts(sp500, mean, nfrequency = 4)
+unemp    <- aggregate.ts(unemp, mean, nfrequency = 4)
+FEDFUNDS <- aggregate.ts(FEDFUNDS, mean, nfrequency = 4)
+CPI      <- aggregate.ts(CPI, mean, nfrequency = 4)
+INDPRO   <- aggregate.ts(INDPRO, mean, nfrequency = 4)
+GOLD     <- aggregate.ts(GOLD, mean, nfrequency = 4)
+
+# FDI is already quarterly and trimmed, no change needed
+
+# Create quarterly dates
+dates <- seq(from = as.Date(paste(start_year, (start_quarter-1)*3+1, "01", sep="-")),
+             by = "quarter",
+             length.out = length(FDI))
+
+
+# --- Predictive variables ---
+
+# Adjust start and end based on overlapping period of your ts
+dates <- seq(
+  from = as.Date(paste(start(unemp)[1], (start(unemp)[2]-1)*3+1, "01", sep="-")),
+  by = "quarter",
+  length.out = length(unemp)
+)
+
+# --- Dependent variable: Next year's unemployment growth rate ---
+UNEMP.FG <- 100 * (log(stats::lag(unemp, 4)) - log(unemp))
+
+# --- Explanatory variables: Past year's growth rates (all % changes) ---
+
+# Industrial Production growth rate
+INDPRO.G <- 100 * (log(INDPRO) - log(stats::lag(INDPRO, -4)))
+
+# CPI growth (inflation rate)
+CPI.G <- 100 * (log(CPI) - log(stats::lag(CPI, -4)))
+
+# Federal Funds Rate growth
+FEDFUNDS.G <- 100 * (log(FEDFUNDS) - log(stats::lag(FEDFUNDS, -4)))
+
+#  S&P500 growth (returns)
+SP500.G <- 100 * (log(sp500) - log(stats::lag(sp500, -4)))
+
+# FDI growth rate
+FDI.G <- 100 * (log(FDI) - log(stats::lag(FDI, -4)))
+
+# Gold price growth rate
+GOLD.G <- 100 * (log(GOLD) - log(stats::lag(GOLD, -4)))
+
+
+# COVID dummy
+covid <- as.integer(dates >= as.Date("2020-03-01") & dates <= as.Date("2021-06-30"))
+
+# Put all series into a list
+series_list <- list(
+  sp500 = sp500,
+  SP500.G = SP500.G,
+  FDI = FDI,
+  FDI.G = FDI.G,
+  GOLD = GOLD,
+  GOLD.G = GOLD.G,
+  CPI = CPI,
+  CPI.G = CPI.G,
+  FEDFUNDS = FEDFUNDS,
+  FEDFUNDS.G = FEDFUNDS.G,
+  unemp = unemp,
+  UNEMP.FG = UNEMP.FG,
+  INDPRO.G = INDPRO.G,
+  covid = covid,
+  dates = dates
+)
+
+# Find minimum length
+min_len <- min(sapply(series_list, length))
+
+# Trim all series to same length
+series_list <- lapply(series_list, function(x) tail(x, min_len))
+
+# Create final dataframe
+data_quarterly <- as.data.frame(series_list)
+
+# Remove any remaining NAs
+data_quarterly <- na.omit(data_quarterly)
+
+
+```
+
+## b. Data Descriptions
+
+In this project, we analyze a linear regression model with the **Unemployment Rate** (`UNEMP.FG`) as the dependent variable and several macroeconomic and financial predictors, including **S&P500 returns** (`SP500.G`), **FDI inflows** (`FDI.G`), **Gold prices** (`GOLD.G`), **Consumer Price Index** (`CPI.G`), **Federal Funds Rate** (`FEDFUNDS.G`), and **Industrial Production** (`INDPRO.G`). All data are obtained from public sources.  
+
+The details are given below:
+
+**UNEMP.FG (Y)**: The civilian unemployment rate measures the percentage of the labor force that is unemployed but actively seeking work. High unemployment is often associated with recessions, making it a useful proxy for economic downturns. Data are obtained from FRED\textsuperscript{[\hyperlink{ref13}{13}]}. Frequency: quarterly (aggregated from monthly). Units: Percent (%).
+
+**S&P500.G (X)**: Quarterly  S&P500 returns, calculated as the log difference over four quarters to capture past-year growth. Data are sourced from Yahoo Finance\textsuperscript{[\hyperlink{ref14}{14}]}. Units are index points (log-differenced).  
+
+**FEDFUNDS.G (Z1)**: Quarterly average of the monthly Federal Funds Rate, representing U.S. monetary policy stance. Past-year average calculated over four quarters. Data from FRED\textsuperscript{[\hyperlink{ref15}{15}]}. Units: Percent (%).
+
+**FDI.G (Z2)**: Quarterly foreign direct investment inflows, representing capital investments in the U.S. economy. Growth is calculated as the log difference over four quarters. Data obtained from FRED\textsuperscript{[\hyperlink{ref16}{16}]}. Units: USD (millions).
+
+**CPI.G (Z3)**: Quarterly Consumer Price Index, aggregated from monthly CPI values, with annual growth computed as the log difference over four quarters. CPI measures the average change in prices over time for a basket of goods and services, indicating inflation. Data from FRED\textsuperscript{[\hyperlink{ref17}{17}]}. Units: Index points.
+
+**INDPRO.G (Z4)**: Quarterly Industrial Production index, aggregated from monthly data. Past-year growth calculated as log difference over four quarters. It measures the total output of the manufacturing, mining, and utilities sectors, reflecting overall economic activity. Data from FRED\textsuperscript{[\hyperlink{ref18}{18}]}. Units: Index points.
+
+**GOLD.G (Z5)**: Quarterly gold prices, calculated as the log difference over four quarters to measure annual growth. Data obtained from Macro Trends\textsuperscript{[\hyperlink{ref19}{19}]}. Units: USD per ounce.
+
+
+**Lag Structure and Rationale**:
+
+A **four-quarter (1 year) lag** is applied to all predictors to align with the forward-looking dependent variable (`UNEMP.FG`). Specifically:  
+
+This lag structure ensures that the predictors reflect **past economic and financial conditions**, allowing us to analyze their effect on unemployment outcomes in the following year.  
+
+Observations with missing values due to lagging and forward-looking calculations were removed:  
+
+- The first four quarters are dropped because lagged growth variables could not be computed.  
+- The last four quarters are dropped because forward-looking unemployment growth (`UNEMP.FG`) could not be calculated.  
+
+This ensures a **complete dataset** suitable for regression analysis.  
+
+
+**Sample Information**
+
+**Sample size**: `r nrow(data_quarterly)` observations  
+**Period**: `r format(min(data_quarterly$date), "%b %Y")` to `r format(max(data_quarterly$date), "%b %Y")`  
+**COVID observations**: `r sum(data_quarterly$covid)` (`r round(sum(data_quarterly$covid)/nrow(data_quarterly)*100, 1)`% of sample)  
+\
+
+
+
+**Descriptive Statistics**
+
+
+```{r descriptive-stats, echo=TRUE}
+# --- Descriptive Statistics for All Variables ---
+
+# Select relevant variables 
+DATA <- data_quarterly[, c("UNEMP.FG", "SP500.G", "FEDFUNDS.G", "FDI.G", "CPI.G", "INDPRO.G", "GOLD.G")]
+
+
+# --- Summary Statistics Table  ---
+stats_table <- data.frame(
+  
+  Min = round(sapply(DATA, min, na.rm = TRUE),0),
+  "1st Qu." = round(sapply(DATA, quantile, probs = 0.25, na.rm = TRUE), 0),
+  Median = round(sapply(DATA, median, na.rm = TRUE), 0),
+  Mean = round(sapply(DATA, mean, na.rm = TRUE), 0),
+  "3rd Qu." = round(sapply(DATA, quantile, probs = 0.75, na.rm = TRUE), 0),
+  Max = round(sapply(DATA, max, na.rm = TRUE), 0),
+  check.names=FALSE
+)
+
+# --- Correlation Matrix ---
+cor_table <- round(cor(DATA, use = "pairwise.complete.obs"), 3)
+rownames(cor_table) <- c("UNEMP.FG",
+                         "SP500.G",
+                         "FEDFUNDS.G",
+                         "FDI.G",
+                         "CPI.G",
+                         "INDPRO.G",
+                         "GOLD.G")
+colnames(cor_table) <- rownames(cor_table)
+
+# --- Display Tables (fit properly, no cutting) ---
+
+# Summary Statistics Table
+kable(stats_table,
+      caption = "Summary Statistics for Predictor and Dependent Variables",
+      booktabs = TRUE,
+      escape = FALSE,
+      align = "lcccccc") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped", "scale_down"),
+                font_size = 9,
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  column_spec(1, width = "4cm", latex_valign = "m") %>%
+  column_spec(2:7, width = "1.6cm", latex_valign = "m") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+# Correlation Matrix Table
+kable(cor_table,
+      caption = "Correlation Matrix among Predictors and Unemployment Forward Growth",
+      booktabs = TRUE,
+      escape = FALSE,
+      align = "ccccccc") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped", "scale_down"),
+                font_size = 9,
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  column_spec(1:7, width = "1.7cm", latex_valign = "m") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+```
+\newpage
+## c. Plots
+
+```{r plots, echo=TRUE, fig.width=16, fig.height=16, out.width="100%", fig.align="center"}
+
+DATA_Q <- data_quarterly
+
+covid_start <- as.Date("2020-03-01")
+covid_end   <- as.Date("2021-06-30")
+
+# --- Time Series Plot Function ---
+plot_ts <- function(yvar, ylab, color){
+  ggplot(DATA_Q, aes(x = dates, y = !!sym(yvar))) +
+    annotate("rect", xmin = covid_start, xmax = covid_end,
+             ymin = -Inf, ymax = Inf, alpha = 0.2, fill = "red") +
+    geom_line(color = color, linewidth = 1.2) +
+    scale_x_date(date_breaks = "5 years", date_labels = "%Y",
+                 limits = as.Date(c("1955-01-01", "2023-12-31"))) + 
+    labs(title = ylab, x = "Year", y = ylab) +
+    theme_minimal(base_size = 16) +  # base size slightly larger
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 18),
+      axis.text.y = element_text(size = 18),
+      axis.title.x = element_text(size = 20, face = "bold", vjust = -0.5),
+      axis.title.y = element_text(size = 20, face = "bold", vjust = 1.5),
+      plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+      plot.margin = margin(12, 12, 12, 12)
+    )
+}
+
+# --- Scatter Plot Function ---
+make_scatter <- function(xvar, xlabel){
+  ggplot(DATA_Q, aes(x = !!sym(xvar), y = UNEMP.FG)) +
+    geom_point(aes(color = factor(covid)), alpha = 0.7, size = 3) +
+    geom_smooth(method = "lm", se = TRUE, color = "red", linewidth = 1) +
+    scale_color_manual(values = c("blue", "orange"),
+                       labels = c("Normal", "COVID"),
+                       name = "Period") +
+    labs(title = paste("Unemployment Growth vs", xlabel),
+         x = xlabel, y = "Unemployment Growth (%)") +
+    theme_minimal(base_size = 16) +
+    theme(
+      axis.text.x = element_text(size = 16),
+      axis.text.y = element_text(size = 16),
+      axis.title.x = element_text(size = 18, face = "bold", vjust = -0.5),
+      axis.title.y = element_text(size = 18, face = "bold", vjust = 1.5),
+      plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+      legend.title = element_text(size = 16),
+      legend.text = element_text(size = 14),
+      plot.margin = margin(12, 12, 12, 12)
+    )
+}
+
+# --- Create Plots ---
+ts_plots <- list(
+  plot_ts("UNEMP.FG", "Unemployment Growth (%)", "blue"),
+  plot_ts("SP500.G", "S&P500 Growth (%)", "darkgreen"),
+  plot_ts("FEDFUNDS.G", "Fed Funds Rate Growth (%)", "darkred"),
+  plot_ts("FDI.G", "FDI Growth (%)", "purple"),
+  plot_ts("CPI.G", "CPI Growth (%)", "orange"),
+  plot_ts("INDPRO.G", "Industrial Production Growth (%)", "brown"),
+  plot_ts("GOLD.G", "Gold Price Growth (%)", "goldenrod")
+)
+
+scatter_plots <- list(
+  make_scatter("SP500.G", "S&P500 Growth (%)"),
+  make_scatter("FEDFUNDS.G", "Fed Funds Rate Growth (%)"),
+  make_scatter("FDI.G", "FDI Growth (%)"),
+  make_scatter("CPI.G", "CPI Growth (%)"),
+  make_scatter("INDPRO.G", "Industrial Production Growth (%)"),
+  make_scatter("GOLD.G", "Gold Price Growth (%)")
+)
+
+# --- Helper: Split Plots into Pages of 2 (last page = 3 if odd count) ---
+make_pages <- function(plot_list, title_text) {
+  n <- length(plot_list)
+  i <- 1
+  while (i <= n) {
+    remaining <- n - i + 1
+    plots_this_page <- ifelse(remaining == 3, 3, min(2, remaining))
+    current_plots <- plot_list[i:(i + plots_this_page - 1)]
+    
+    print(
+      wrap_plots(current_plots, ncol = 1) +
+        plot_annotation(title = title_text) &
+        theme(plot.title = element_text(size = 18, face = "bold", hjust = 0.5))
+    )
+    
+    i <- i + plots_this_page
+    if (i <= n) grid::grid.newpage()
+  }
+}
+
+# --- Render Time Series Pages ---
+make_pages(ts_plots, "Time Series Plots")
+
+grid::grid.newpage()
+
+# --- Render Scatter Pages ---
+make_pages(scatter_plots, "Scatter Plots: Unemployment Growth vs Other Variables")
+
+
+
+```
+\newpage
+# 3. Interpretation of the fitted regression 
+
+## a. OLS Estimation
+
+
+```{r OLS, echo=TRUE}
+# --- Fit Simple Linear Regression ---
+eqn1.ols <- lm(UNEMP.FG ~ SP500.G, data = data_quarterly)
+
+# --- Coefficient Table: Simple Regression ---
+coef_simple <- tidy(eqn1.ols) %>%
+  mutate(term = c("Intercept", "S&P500 Growth"),
+         estimate = round(estimate, 3),
+         std.error = round(std.error, 3),
+         statistic = round(statistic, 2),
+         p.value = format.pval(p.value, digits = 4, eps = .0001))
+
+kable(coef_simple,
+      caption = "Simple Linear Regression (Unemployment vs. SP500 Growth)",
+      booktabs = TRUE,
+      align = "lcccc",
+      col.names = c("Variable", "Estimate", "Std. Error", "t value", "p value")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+# --- Fit Multiple Linear Regression ---
+eqn2.ols <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G,
+               data = data_quarterly)
+eqn2_summary <- summary(eqn2.ols)
+
+# --- Coefficient Table: Multiple Regression ---
+coef_multiple <- tidy(eqn2.ols) %>%
+  mutate(term = c("Intercept", "SP500 Growth", "Fed Funds Growth", "FDI Growth",
+                  "CPI Growth", "Industrial Production Growth", "Gold Growth"),
+         estimate = round(estimate, 3),
+         std.error = round(std.error, 3),
+         statistic = round(statistic, 2),
+         p.value = format.pval(p.value, digits = 4, eps = .0001))
+
+kable(coef_multiple,
+      caption = "Multiple Linear Regression (Unemployment vs. Economic and Financial Indicators)",
+      booktabs = TRUE,
+      align = "lcccc",
+      col.names = c("Variable", "Estimate", "Std. Error", "t value", "p value")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+```
+
+```{r OLS summary_code, echo=TRUE, results='hide'}
+# --- Model Summary Table: Multiple Regression Only ---
+
+# Extract key values
+R2 <- eqn2_summary$r.squared
+AdjR2 <- eqn2_summary$adj.r.squared
+Fstat <- eqn2_summary$fstatistic[1]
+df.model <- eqn2_summary$fstatistic[2]
+df.resid <- eqn2_summary$fstatistic[3]
+p.value <- pf(Fstat, df.model, df.resid, lower.tail = FALSE)
+
+# Create formatted table
+model_summary <- data.frame(
+  `R-Squared` = round(R2, 4),
+  `Adjusted R-Squared` = round(AdjR2, 4),
+  `F-Statistic` = round(Fstat, 2),
+  # Format p-value here too
+  `p-value` = format.pval(p.value, digits = 4, eps = .0001),
+  `df (Model, Residual)` = paste(df.model, df.resid, sep = ", "),
+  check.names = FALSE
+)
+```
+
+\newpage
+```{r OLS summary, echo=TRUE, results='asis'}
+# Display nicely
+kable(model_summary,
+      caption = "Model Fit Statistics for Multiple Regression",
+      booktabs = TRUE,
+      align = "lccccc") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+```
+
+The coefficient estimate of SP500 Growth decreases in magnitude from -0.391 in the simple regression to -0.101 in the multiple regression. *This makes more sense according to theoretical and empirical literature, because the multiple regression isolates the effect of SP500 Growth on unemployment while controlling for other macroeconomic factors, providing a more realistic estimate.* The negative sign remains consistent with theory, indicating that higher stock market growth is associated with lower unemployment.
+
+
+### b. Examination of Confounding Factors in Multiple Regression
+
+In the multiple regression model, the confounding factors and their coefficient estimates are as follows:
+
+| Variable                       | Estimate | Sign  |
+|--------------------------------|---------|-------|
+| Fed Funds Growth                | -0.115  | Negative |
+| FDI Growth                      | -0.011  | Negative |
+| CPI Growth                      | 0.415   | Positive |
+| Industrial Production Growth    | -2.395  | Negative |
+| Gold Growth                     | 0.054   | Positive |
+
+
+**Interpretation:**
+
+The multiple regression results show that Fed Funds Growth (-0.115) and Industrial Production Growth (-2.395) have negative coefficients, consistent with theory: higher interest rates or stronger industrial output tend to reduce unemployment growth. FDI Growth (-0.011) also shows a slight negative effect, aligning with empirical evidence that foreign investment supports job creation. CPI Growth (0.415) and Gold Growth (0.054) are positive, reflecting that higher inflation or rising gold prices may coincide with higher unemployment in certain contexts. Overall, the signs and relative sizes of these confounding factors largely align with theoretical expectations and empirical literature.
+
+
+\newpage
+# 4. Hypothesis Testing: t-test
+
+## a. T-test
+
+We perform a t-test on the coefficient of SP500.G (S&P500 Growth) in both the simple linear regression (Project 1) and the multiple linear regression (Project 2) to test whether S&P500 growth has a statistically significant effect on unemployment growth.
+
+**Hypothesis**
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!50!black,title=Hypothesis]
+$H_0: \ \beta = 0 \quad$ (SP 500 returns have no effect on unemployment) \\
+$H_1: \ \beta \neq 0 \quad$ (SP 500 returns affect unemployment)
+\end{tcolorbox}
+
+```{r Hypothesis test: t-test, echo=TRUE}
+# --- Simple Regression (Project 1) ---
+eqn1.ols <- lm(UNEMP.FG ~ SP500.G, data = data_quarterly)
+
+# --- Multiple Regression (Project 2) ---
+eqn2.ols <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G,
+               data = data_quarterly)
+
+# --- Extract Coefficients for SP500.G ---
+coef_simple   <- summary(eqn1.ols)$coefficients["SP500.G", ]
+coef_multiple <- summary(eqn2.ols)$coefficients["SP500.G", ]
+
+# --- Comparison Table ---
+t_test_table <- data.frame(
+  Model      = c("Simple Regression (Project 1)", "Multiple Regression (Project 2)"),
+  Estimate   = round(c(coef_simple[1],  coef_multiple[1]),  3),
+  Std.Error  = round(c(coef_simple[2],  coef_multiple[2]),  3),
+  t.stat     = round(c(coef_simple[3],  coef_multiple[3]),  2),
+  p.value    = c(format.pval(coef_simple[4], digits = 4, eps = .0001),
+                 format.pval(coef_multiple[4], digits = 4, eps = .0001))
+)
+
+kable(t_test_table,
+      caption = "T-test on SP500 Growth Coefficient: Simple vs Multiple Regression",
+      booktabs = TRUE,
+      align = "lcccc",
+      col.names = c("Model", "Estimate", "Std. Error", "t-statistic", "p-value")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+
+# --- Conclusions Table ---
+conclusions <- data.frame(
+  Model = rep(c("Simple Regression", "Multiple Regression"), each = 3),
+  Significance = rep(c("1%", "5%", "10%"), 2),
+  Decision = c(
+    ifelse(coef_simple[4]   < 0.01, "Reject H0", "Fail to Reject H0"),
+    ifelse(coef_simple[4]   < 0.05, "Reject H0", "Fail to Reject H0"),
+    ifelse(coef_simple[4]   < 0.10, "Reject H0", "Fail to Reject H0"),
+    ifelse(coef_multiple[4] < 0.01, "Reject H0", "Fail to Reject H0"),
+    ifelse(coef_multiple[4] < 0.05, "Reject H0", "Fail to Reject H0"),
+    ifelse(coef_multiple[4] < 0.10, "Reject H0", "Fail to Reject H0")
+  )
+)
+
+kable(conclusions,
+      caption = "T-test Conclusions at Different Significance Levels",
+      booktabs = TRUE,
+      align = "lcc",
+      col.names = c("Model", "Significance Level", "Decision")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+```
+
+**Interpretation:** 
+
+After including confounding factors in the regression, the conclusions regarding the impact of SP500 growth on unemployment change noticeably. In the simple regression model, SP500 growth is highly significant at the 1%, 5%, and 10% levels, suggesting a strong negative relationship with unemployment. **However, in the multiple regression model, which controls for other macroeconomic variables such as FEDFUNDS, FDI, CPI, INDPRO, and GOLD, the t-statistic for SP500 decreases in magnitude and is no longer significant at the 1% and 5% levels, being only marginally significant at 10%**. This indicates that part of the effect observed in the simple regression can be attributed to the influence of these additional factors, emphasizing the importance of accounting for confounders to accurately assess the independent contribution of SP500 growth.
+
+\newpage
+# 5. Hypothesis Testing: F-test
+
+## a. Mathematical Equation
+
+The multiple regression estimated in this project is expressed as:
+
+$$
+\begin{aligned}
+\text{UNEMP.FG}_t &= \beta_0 
++ \beta_1 \times \text{SP500.G}_{t-4} 
++ \beta_2 \times \text{FEDFUNDS.G}_{t-4} \\
+&+ \beta_3 \times \text{FDI.G}_{t-4} 
++ \beta_4 \times \text{CPI.G}_{t-4} \\
+&+ \beta_5 \times \text{INDPRO.G}_{t-4} 
++ \beta_6 \times \text{GOLD.G}_{t-4} 
++ u_t
+\end{aligned}
+$$
+
+
+
+## b. F-test on the overall significance
+
+**Hypothesis**
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!50!black,title=Hypothesis]
+$H_0: \beta_1 = \beta_2 = \beta_3 = \beta_4 = \beta_5 = \beta_6 = 0$ \quad (None of the predictors affect unemployment) \\
+$H_1: \text{At least one } \beta_i \neq 0$ \quad (At least one predictor affects unemployment)
+\end{tcolorbox}
+
+```{r F-test_overall, echo=TRUE}
+
+# --- Restricted model (intercept only) ---
+eqn3.r <- lm(UNEMP.FG ~ 1, data = data_quarterly)
+
+# --- Unrestricted model (all predictors) ---
+eqn2.ols <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G,
+               data = data_quarterly)
+
+# --- Compute TSS, RSS, ESS ---
+y <- data_quarterly[, "UNEMP.FG"]
+y_mean <- mean(y)
+TSS <- sum((y - y_mean)^2)
+rss.u <- sum(eqn2.ols$residuals^2)  # Unrestricted RSS
+ESS <- TSS - rss.u
+
+# --- F-statistic ---
+m <- 6  # number of restrictions (predictors)
+df1 <- m
+df2 <- eqn2.ols$df.residual
+f.stat <- ((ESS) / m) / (rss.u / df2)
+
+# --- p-value ---
+p.value <- pf(f.stat, df1, df2, lower.tail = FALSE)
+
+# --- F-critical values ---
+f.crit.1  <- qf(0.99, df1, df2)
+f.crit.5  <- qf(0.95, df1, df2)
+f.crit.10 <- qf(0.90, df1, df2)
+
+# --- Create results table ---
+F_table <- data.frame(
+  `df1`          = round(df1, 0),
+  `df2`          = round(df2, 0),
+  `TSS`          = round(TSS, 3),
+  `RSSu`         = round(rss.u, 3),
+  `ESS`          = round(ESS, 3),
+  `F-statistic`  = round(f.stat, 3),
+  `1%`           = round(f.crit.1, 3),
+  `5%`           = round(f.crit.5, 3),
+  `10%`          = round(f.crit.10, 3),
+  `p-value`      = format.pval(p.value, digits = 4, eps = .0001),
+  Decision       = ifelse(p.value < 0.05, "Reject H0", "Fail to Reject H0"),
+  check.names = FALSE
+)
+
+# --- Display table ---
+kable(F_table,
+      caption = "Overall F-Test: Joint Significance of All Predictors",
+      booktabs = TRUE,
+      align = "lcccccc") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+
+```
+
+
+**Interpretation:**: 
+
+The F-statistic (118.824) exceeds all critical values, and the p-value is 0, indicating that we fail to accept H0. This confirms that the model is statistically significant, meaning all variables jointly explain variations in unemployment.
+
+
+
+## c. F-test on the joint significance of the confounding factors
+
+**Hypothesis**
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!50!black,title=Hypothesis]
+$H_0: \beta_2 = \beta_3 = \beta_4 = \beta_5 = \beta_6 = 0$ \quad (Confounding factors affect unemployment) \\
+$H_1: \text{At least one } \beta_i \neq 0$ \quad (At least one confounding factor affects unemployment)
+\end{tcolorbox}
+
+```{r F-test_confounding, echo=TRUE}
+
+# Restricted model 
+eqn1.ols <- lm(UNEMP.FG ~ SP500.G, data = data_quarterly)
+
+# Unrestricted model (all predictors)
+eqn2.ols <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G, data = data_quarterly)
+
+# RSS from the restricted and the unrestricted regressions
+rss.r <- sum(eqn1.ols$residuals^2)  # Restricted RSS
+rss.u <- sum(eqn2.ols$residuals^2)  # Unrestricted RSS
+
+# F-statistic
+m <- 5  # number of restrictions
+df1 <- m
+df2 <- eqn2.ols$df.residual
+f.stat <- ((rss.r - rss.u)/m) / (rss.u/df2)
+
+# p-value
+p.value <- pf(f.stat, df1, df2, lower.tail = FALSE)
+
+# F-critical values
+f.crit.1 <- qf(0.99, df1, df2)
+f.crit.5 <- qf(0.95, df1, df2)
+f.crit.10 <- qf(0.90, df1, df2)
+
+
+F_table <- data.frame(
+  `df1` = round(df1, 4),
+  `df2` = round(df2, 4),
+  `RSSu` = round(rss.u, 4),
+  `RSSr` = round(rss.r, 4),
+  `F-statistic` = round(f.stat, 4),
+  `1%` = round(f.crit.1, 4),
+  `5%` = round(f.crit.5, 4),
+  `10%` = round(f.crit.10, 4),
+  `p-value` = format(p.value, scientific = TRUE, digits = 3),
+  Decision = ifelse(p.value < 0.05, "Reject H0", "Fail to Reject H0"),
+  check.names = FALSE
+)
+
+# Display table
+kable(F_table,
+      caption = "Overall F-Test: Joint Significance of Confounding Factors",
+      booktabs = TRUE,
+      align = "lcccccc") %>%
+  kable_styling(latex_options = c("HOLD_position","striped"),
+                stripe_color = "blue!5!white", position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+
+```
+
+
+
+**Interpretation:**: 
+
+The F-statistic (129.303) surpasses the 1%, 5%, and 10% critical values with a p-value of 0, leading us to reject H0. 
+
+Hence, the macroeconomic controls (Federal Funds Rate, FDI, CPI, INDPRO, and Gold) add substantial explanatory power beyond S&P500 Growth alone, validating the expansion from the simple to the multiple model.
+
+# 6. Model Selection
+
+## a. Parsimonious Multiple Linear Regression Model
+
+Model selection helps identify which regression specification best explains unemployment growth among three competing models.
+
+
+**Model A**: Simple Linear Regression 
+$$
+\text{unemp}_t = \beta_0 + \beta_1 \times \text{SP500}_{t-4} + u_t
+$$
+
+**Model B**: Full Multiple Regression includes independent and confounding variables
+$$
+\begin{aligned}
+\text{UNEMP.FG}_t &= \beta_0 
++ \beta_1 \times \text{SP500.G}_{t-4} 
++ \beta_2 \times \text{FEDFUNDS.G}_{t-4} \\
+&+ \beta_3 \times \text{FDI.G}_{t-4} 
++ \beta_4 \times \text{CPI.G}_{t-4} \\
+&+ \beta_5 \times \text{INDPRO.G}_{t-4} 
++ \beta_6 \times \text{GOLD.G}_{t-4} 
++ u_t
+\end{aligned}
+$$
+
+**Model C**: Parsimonious Multiple Regression — drops variables that are insignificant at 10 % level
+
+```{r parsimonious_model, echo=TRUE}
+# --- Extract p-values from the multiple regression model ---
+p.value <- summary(eqn2.ols)$coefficients[,4]
+
+# --- Create a dataframe for significance classification ---
+p.value_table <- data.frame(
+  Variable = c("Intercept", 
+               "S&P500 Growth", 
+               "Fed Funds Growth", 
+               "FDI Growth", 
+               "CPI Growth", 
+               "Industrial Production Growth", 
+               "Gold Growth"),
+ 
+  `p-value` = format(p.value, scientific = TRUE, digits = 3),
+  Significance = case_when(
+    p.value < 0.10 ~ "Significant",
+    TRUE ~ "Insignificant"
+  )
+)
+```
+\
+```{r parsimonious_model table, echo=TRUE}
+# --- Display neatly formatted table ---
+kable(p.value_table,
+      caption = "P Values and Significance Levels for Each Variable at 10 percent critical value",
+      booktabs = TRUE,
+      align = "lcc",
+      col.names = c("Variable", "p value", "Significance Level")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+```
+
+**Interpretation (Model C)**   
+
+The p-values shows that SP500 (p = 0.0526), FEDFUNDS (p < 0.0001), and INDPRO (p < 0.0001) are significant at the 10 % level. By contrast, FDI (p = 0.1266), CPI (p = 0.1586), and GOLD (p = 0.1670) are not significant. Therefore, in the parsimonious model (Model C) we retain only SP500, FEDFUNDS, and INDPRO as explanatory variables.
+
+$$
+\text{UNEMP.FG}_t = \beta_0 
++ \beta_1 \times \text{SP500.G}_{t-4}  
++ \beta_2 \times \text{FEDFUNDS.G}_{t-4} 
++ \beta_3 \times \text{INDPRO.G}_{t-4} 
++ u_t
+$$
+
+
+
+
+```{r parsimonious_comparison, echo=TRUE}
+# Compare model fit
+
+# Simple regression
+eqn1.ols <- lm(UNEMP.FG ~ SP500.G, data = data_quarterly)
+
+# Multiple regression (with all confounding variables)
+eqn2.ols <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G, data = data_quarterly)
+
+# Parsimonious Multiple regression (removing insignificant variables)
+eqn4.ols <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + INDPRO.G, data = data_quarterly)
+
+# --- Create comparison metrics for each model ---
+model_comparison <- data.frame(
+  Model = c("Simple Regression",
+            " Multiple Regression",
+            "Parsimonious Model"),
+  `Adjusted R²` = c(
+    round(summary(eqn1.ols)$adj.r.squared, 4),
+    round(summary(eqn2.ols)$adj.r.squared, 4),
+    round(summary(eqn4.ols)$adj.r.squared, 4)
+  ),
+  AIC = c(
+    round(AIC(eqn1.ols), 2),
+    round(AIC(eqn2.ols), 2),
+    round(AIC(eqn4.ols), 2)
+  ),
+  BIC = c(
+    round(BIC(eqn1.ols), 2),
+    round(BIC(eqn2.ols), 2),
+    round(BIC(eqn4.ols), 2)
+  )
+)
+
+# --- Display table neatly formatted ---
+kable(model_comparison,
+      caption = "Model Comparison",
+      booktabs = TRUE,
+      align = "lccc",
+      col.names = c("Model", "Adjusted R2", "AIC", "BIC")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+```
+
+### Adjusted R-squared:
+Model B has the highest adjusted R-squared value (0.7434), demonstrating the greatest explanatory power.
+Model C has an almost identical adjusted R-squared value (0.7383), while Model A performs much worse (0.0660), barely explaining any variation in unemployment growth.
+
+### AIC:
+Model B has the lowest AIC (1880.984), showing the best overall fit.
+Model C’s AIC (1882.857) is very close, meaning it explains the data almost as well but with fewer variables.
+Model A’s AIC (2192.613) is much higher, showing a clearly worse fit.
+
+### BIC:
+Model C has the lowest BIC (1900.363), lower than Model B (1908.994) and Model A (2203.117).
+Since BIC gives a higher penalty for using too many variables, Model C is preferred because it is simpler but still fits the data well.
+
+### Conclusion
+*Adjusted R-squared*: Model B 
+*AIC*: Model B 
+*BIC*: Model C 
+
+Overall, Model B provides the best fit, but Model C provides almost the same explanatory power with fewer predictors. **This makes Model C the preferred model due to its combination of accuracy and simplicity in explaining unemployment growth**.
+
+\newpage
+
+## b. Cross Validation
+
+### Time Split
+
+```{r time_split, echo=TRUE}
+
+Data <- ts(data_quarterly, start = c(1956,1), frequency = 4)
+
+# ------------------- Helper Function -------------------
+get_performance <- function(train_end, val_start, split_label) {
+  
+  training   <- window(Data, end = train_end)
+  validation <- window(Data, start = val_start)
+  
+  # --- Model 1 ---
+  eqn1.ols   <- lm(UNEMP.FG ~ SP500.G, data = training)
+  y_eqn1     <- predict(eqn1.ols, new = validation)
+  error_eqn1 <- validation[,"UNEMP.FG"] - y_eqn1
+  rmse_eqn1  <- sqrt(mean(error_eqn1^2))
+  mae_eqn1   <- mean(abs(error_eqn1))
+  
+  # --- Model 2 ---
+  eqn2.ols   <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G, data = training)
+  y_eqn2     <- predict(eqn2.ols, new = validation)
+  error_eqn2 <- validation[,"UNEMP.FG"] - y_eqn2
+  rmse_eqn2  <- sqrt(mean(error_eqn2^2))
+  mae_eqn2   <- mean(abs(error_eqn2))
+  
+  # --- Model 3 ---
+  eqn4.ols   <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + INDPRO.G, data = training)
+  y_eqn4     <- predict(eqn4.ols, new = validation)
+  error_eqn4 <- validation[,"UNEMP.FG"] - y_eqn4
+  rmse_eqn4  <- sqrt(mean(error_eqn4^2))
+  mae_eqn4   <- mean(abs(error_eqn4))
+  
+  # --- Combine results ---
+  performance <- data.frame(
+    Model = c("Model 1: Simple Regression",
+              "Model 2: Multiple Regression",
+              "Model 3: Parsimonious Regression"),
+    RMSE = c(rmse_eqn1, rmse_eqn2, rmse_eqn4),
+    MAE  = c(mae_eqn1, mae_eqn2, mae_eqn4)
+  )
+  
+  kable(performance,
+        caption = paste("RMSE and MAE for Split", split_label),
+        booktabs = TRUE,
+        align = "lcc",
+        col.names = c("Model", "RMSE", "MAE")) %>%
+    kable_styling(latex_options = c("HOLD_position", "striped"),
+                  stripe_color = "blue!5!white") %>%
+    row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+}
+
+# ------------------- Time Splits -------------------
+
+# Split 1: 10% validation
+get_performance(train_end = c(2015, 4), val_start = c(2016, 1), split_label = "1 (10 percent)")
+
+# Split 2: 15% validation
+get_performance(train_end = c(2012, 4), val_start = c(2013, 1), split_label = "2 (15 percent)")
+
+# Split 3: 20% validation
+get_performance(train_end = c(2010, 4), val_start = c(2011, 1), split_label = "3 (20 percent)")
+
+# Split 4: 25% validation
+get_performance(train_end = c(2008, 4), val_start = c(2009, 1), split_label = "4 (25 percent)")
+
+```
+
+**Interpretation: Robustness of Results Across Time Splits**
+
+The results across the four time splits (10%, 15%, 20%, and 25%) indicate that **Models 2 (Multiple Regression) and 3 (Parsimonious Regression)** consistently  outperform Model 1 (Simple Regression) in terms of **lower RMSE and MAE values**.  While the exact magnitudes vary slightly across splits, the ranking and relative  performance of the models remain stable. 
+
+This consistency suggests that the findings are robust to changes in the  training-validation split proportion, implying that the model selection is not  sensitive to the specific sample partition used.
+
+\newpage
+
+### Rolling Window Analysis
+
+
+```{r rolling_window, echo=TRUE}
+
+
+Data <- ts(data_quarterly, start = c(1956,1), frequency = 4)
+
+# ------------------- Rolling Window Function -------------------
+rolling_window_forecast <- function(data, initial_train_pct, window_type = "expanding") {
+  
+  total_obs <- length(data[,1])
+  initial_train_size <- floor(total_obs * initial_train_pct)
+  
+  # Ensure validation has at least 24 observations
+  remaining_obs <- total_obs - initial_train_size
+  if (remaining_obs < 24) {
+    stop("Not enough observations for validation (need at least 24)")
+  }
+  
+  # Storage for results
+  results_model1 <- c()
+  results_model2 <- c()
+  results_model3 <- c()
+  actual_values <- c()
+  
+  # Rolling window loop
+  for (i in initial_train_size:(total_obs - 1)) {
+    
+    # Define training window
+    if (window_type == "expanding") {
+      train_start <- 1
+      train_end <- i
+    } else if (window_type == "moving") {
+      train_start <- max(1, i - initial_train_size + 1)
+      train_end <- i
+    }
+    
+    # Extract training and validation data as data frames
+    training <- as.data.frame(data[train_start:train_end, ])
+    validation <- as.data.frame(data[i + 1, , drop = FALSE])
+    
+    # --- Model 1: Simple Regression ---
+    eqn1.ols <- lm(UNEMP.FG ~ SP500.G, data = training)
+    pred1 <- predict(eqn1.ols, newdata = validation)
+    
+    # --- Model 2: Multiple Regression ---
+    eqn2.ols <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G, 
+                   data = training)
+    pred2 <- predict(eqn2.ols, newdata = validation)
+    
+    # --- Model 3: Parsimonious Regression ---
+    eqn4.ols <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + INDPRO.G, 
+                   data = training)
+    pred3 <- predict(eqn4.ols, newdata = validation)
+    
+    # Store results
+    results_model1 <- c(results_model1, pred1)
+    results_model2 <- c(results_model2, pred2)
+    results_model3 <- c(results_model3, pred3)
+    actual_values <- c(actual_values, validation$UNEMP.FG)
+  }
+  
+  # Calculate performance metrics
+  error1 <- actual_values - results_model1
+  error2 <- actual_values - results_model2
+  error3 <- actual_values - results_model3
+  
+  rmse1 <- sqrt(mean(error1^2, na.rm = TRUE))
+  rmse2 <- sqrt(mean(error2^2, na.rm = TRUE))
+  rmse3 <- sqrt(mean(error3^2, na.rm = TRUE))
+  
+  mae1 <- mean(abs(error1), na.rm = TRUE)
+  mae2 <- mean(abs(error2), na.rm = TRUE)
+  mae3 <- mean(abs(error3), na.rm = TRUE)
+  
+  # Create results dataframe
+  performance <- data.frame(
+    Model = c("Model 1: Simple Regression",
+              "Model 2: Multiple Regression",
+              "Model 3: Parsimonious Regression"),
+    RMSE = c(rmse1, rmse2, rmse3),
+    MAE = c(mae1, mae2, mae3),
+    N_Forecasts = rep(length(actual_values), 3)
+  )
+  
+  return(list(performance = performance, 
+              predictions = list(model1 = results_model1, 
+                                 model2 = results_model2, 
+                                 model3 = results_model3),
+              actuals = actual_values))
+}
+```
+\
+```{r Rolling Window, echo=TRUE}
+# ------------------- Run Rolling Window Analysis -------------------
+
+# Expanding Window: 75% initial
+results_exp_75 <- rolling_window_forecast(Data, initial_train_pct = 0.75, 
+                                           window_type = "expanding")
+kable(results_exp_75$performance,
+      caption = "75 percent Initial Training",
+      booktabs = TRUE,
+      align = "lccc",
+      col.names = c("Model", "RMSE", "MAE", "# Forecasts")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+# Expanding Window: 80% initial
+results_exp_80 <- rolling_window_forecast(Data, initial_train_pct = 0.80, 
+                                           window_type = "expanding")
+kable(results_exp_80$performance,
+      caption = "80 percent Initial Training",
+      booktabs = TRUE,
+      align = "lccc",
+      col.names = c("Model", "RMSE", "MAE", "# Forecasts")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+# Expanding Window: 85% initial
+results_exp_85 <- rolling_window_forecast(Data, initial_train_pct = 0.85, 
+                                           window_type = "expanding")
+kable(results_exp_85$performance,
+      caption = "85 percent Initial Training",
+      booktabs = TRUE,
+      align = "lccc",
+      col.names = c("Model", "RMSE", "MAE", "# Forecasts")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+```
+
+\newpage
+
+```{r summary comparision, echo=TRUE}
+# ------------------- Summary Comparison -------------------
+summary_df <- data.frame(
+  Window_Type = c("Expanding 75%", "Expanding 80%", "Expanding 85%"),
+  Model1_RMSE = c(results_exp_75$performance$RMSE[1], 
+                  results_exp_80$performance$RMSE[1],
+                  results_exp_85$performance$RMSE[1]),
+  Model2_RMSE = c(results_exp_75$performance$RMSE[2], 
+                  results_exp_80$performance$RMSE[2],
+                  results_exp_85$performance$RMSE[2]),
+  Model3_RMSE = c(results_exp_75$performance$RMSE[3], 
+                  results_exp_80$performance$RMSE[3],
+                  results_exp_85$performance$RMSE[3])
+)
+
+```
+
+*Forecasts' indicates the number of out-of-sample predictions generated during the rolling window procedure. It represents the number of validation observations used to evaluate model performance (for computing RMSE and MAE).*
+
+**Interpretation:**
+
+The expanding window results show that the **Multiple and Parsimonious Regression models** consistently outperform the Simple Regression model, with lower and stable RMSE and MAE across 75%, 80%, and 85% initial windows, indicating that these models provide robust and reliable forecasts of unemployment growth.
+
+\
+
+# 7. Conclusion
+
+This project successfully developed and evaluated a multiple linear regression model to anticipate fluctuations in the U.S. Unemployment Rate (**UNEMP.FG**) using six macroeconomic and financial indicators from October 1955 to October 2023.
+
+## Summary of Key Findings
+
+1.  **Model Superiority and Joint Significance**
+
+The **Multiple Regression Model (Model B)**, incorporating all six predictors, provides significantly greater explanatory power than the Simple Linear Regression (Model A), evidenced by a vastly higher Adjusted $R^2$ ($\text{0.7434}$ vs. $\text{0.0666}$). The F-test on the joint significance of the confounding factors (excluding S\&P500 Growth) was statistically significant, validating the expansion to the multiple regression framework.
+
+2.  **Key Drivers and Relationships**
+
+The most impactful and statistically significant predictors of future unemployment growth are **Industrial Production Growth** (INDPRO.G) and **Federal Funds Rate Growth** (FEDFUNDS.G). Both variables exhibit a **negative** relationship with $\text{UNEMP.FG}$. This aligns with economic theory: higher industrial output and tighter monetary policy (higher Fed Funds Rate) signal past economic strength that precedes lower future unemployment growth.
+\newpage
+
+3.  **Optimal Model Selection: The Parsimonious Model**
+
+Based on the trade-off between fit and complexity, the **Parsimonious Model (Model C)** is the preferred specification. This model retains only the three most significant variables: $\text{SP500.G}$, $\text{FEDFUNDS.G}$, and $\text{INDPRO.G}$
+
+ $$\text{UNEMP.FG}_t = \beta_0 + \beta_1 \times \text{SP500.G}_{t-4} + \beta_2 \times \text{FEDFUNDS.G}_{t-4} + \beta_3 \times \text{INDPRO.G}_{t-4} + u_t$$ 
+
+Model C achieved an Adjusted $R^2$ ($\text{0.7383}$) almost identical to Model B, while recording the lowest **BIC** ($\text{1900.36}$), indicating the best fit with the fewest variables
+
+4.  **Forecasting Reliability**
+ 
+ All **Cross-Validation** exercises (Time Split and Expanding Window) consistently showed that both the Multiple and Parsimonious Models yield significantly lower **RMSE** and **MAE** values compared to the Simple Regression Model. This confirms that the benefits of the multi-variable approach are robust and maintained in **out-of-sample** forecasting applications.
+
+\newpage
+# References
+
+\hypertarget{ref1}{}[1] **Green A, et al.** *Identifying Economic Factors Affecting Unemployment Rates. arXiv. 2024:2411.02374.* Available at: <https://arxiv.org/abs/2411.02374>
+
+\hypertarget{ref2}{}[2] **Romer CD, et al.** *A New Measure of Monetary Shocks: Derivation and Implications. Am Econ Rev. 2004;94(4):1055–1084.* Available at: <https://eml.berkeley.edu/~dromer/papers/AER_September04.pdf>
+
+\hypertarget{ref3}{}[3] **Bernanke BS, et al.** *The Federal Funds Rate and the Channels of Monetary Transmission. Am Econ Rev. 1992;82(4):901–921.* Available at: <http://drphilipshaw.com/Protected/The%20Federal%20Funds%20Rate%20and%20the%20Channels%20of%20Monetary%20Transmission.pdf>
+
+\hypertarget{ref4}{}[4] **Alfaro L, et al.** *FDI and economic growth: the role of local financial markets. J Int Econ. 2004;64(1):89-112.* Available at: <https://ideas.repec.org/a/eee/inecon/v64y2004i1p89-112.html> 
+
+\hypertarget{ref5}{}[5] **Borensztein E, et al.** *How does foreign direct investment affect economic growth?. J Int Econ. 1998;45(1):115-135.*.Available at: <https://olemiss.edu/courses/inst310/BorenszteinDeGLee98.pdf> 
+
+\hypertarget{ref6}{}[6] **Phillips AW.** *The Relation Between Unemployment and the Rate of Change of Money Wage Rates in United Kingdom,1861-1975. Economica. 1958;25:283-299.* Available at: <https://onlinelibrary.wiley.com/doi/full/10.1111/j.1468-0335.1958.tb00003.x> 
+
+\hypertarget{ref7}{}[7] **Hoover KD.** *The Genesis of Samuelson and Solow’s Price-Inflation Phillips Curve. Hist Econ Rev. 2016;61(1):1-16.* Available at: <https://public.econ.duke.edu/~kdh9/Source%20Materials/Research/SamuelsonSolowHER.pdf> 
+
+\hypertarget{ref8}{}[8] **Ball L, et al.** *The NAIRU in Theory and Practice. J Econ Perspect. 2002;16(4):115-136.* Available at: <https://www.aeaweb.org/articles?id=10.1257/089533002320951000> 
+
+\hypertarget{ref9}{}[9] **Bernanke BS, et al.** *The Federal Funds Rate and the Channels of Monetary Transmission. Am Econ Rev. 1992;82(4):901–921.*. Available at: <https://www.jstor.org/stable/2117350> 
+
+\hypertarget{ref10}{}[10] **Stock JH, et al.** *Forecasting inflation.Journal of Monetary Economics. 1999;44(2):293-335.* Available at: <https://www.sciencedirect.com/science/article/abs/pii/S0304393299000276>
+
+\hypertarget{ref11}{}[11] **Barsky R, et al.** *What Drives Gold Prices?. Chicago Fed Letter. 2021:464.* Available at: <https://www.chicagofed.org/publications/chicago-fed-letter/2021/464?>
+
+\hypertarget{ref12}{}[12] **Kandoussi M, et al.** *Uncertainty Shocks and Unemployment Dynamics in U.S. Labor Market. IZA – Institute of Labor Economics. 2020:13438.* Available at: <https://docs.iza.org/dp13438.pdf>
+
+\hypertarget{ref13}{}[13] **Federal Reserve Bank of St. Louis - FRED**. *Unemployment Rate (UNRATE). St. Louis Fed. 2025.* Available at: <https://fred.stlouisfed.org/series/UNRATE>  
+
+\hypertarget{ref14}{}[14] **Yahoo Finance**. *S&P500 (^GSPC) — Historical Monthly Prices. 2025.* Available at: <https://finance.yahoo.com/quote/%5EGSPC/history/?frequency=1mo>  
+
+\hypertarget{ref15}{}[15] **Federal Reserve Bank of St. Louis - FRED**. *Federal Funds Effective Rate (FEDFUNDS). 2025.* Available at: <https://fred.stlouisfed.org/series/FEDFUNDS>  
+
+\hypertarget{ref16}{}[16] **Federal Reserve Bank of St. Louis - FRED**. *Rest of the World; Foreign Direct Investment in U.S.; Asset (Current Cost), Transactions (ROWFDIQ027S). 2025.* Available at: <https://fred.stlouisfed.org/series/ROWFDIQ027S>  
+
+\hypertarget{ref17}{}[17] **Federal Reserve Bank of St. Louis - FRED**. *Consumer Price Index for All Urban Consumers: All Items in U.S. City Average (CPIAUCSL). 2025.* Available at: <https://fred.stlouisfed.org/series/CPIAUCSL>  
+
+\hypertarget{ref18}{}[18] **Federal Reserve Bank of St. Louis - FRED**. *Industrial Production: Total Index (INDPRO). 2025.* Available at: <https://fred.stlouisfed.org/series/INDPRO>  
+
+\hypertarget{ref19}{}[19] **Macro Trends**. *Gold Prices - 100 Year Historical. 2025.* Available at: <https://www.macrotrends.net/1333/historical-gold-prices-100-year-chart>  
+

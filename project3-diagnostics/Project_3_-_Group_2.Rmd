@@ -1,0 +1,898 @@
+---
+title: 'ECON622 Project 3: Regression Diagnosis'
+author: "Group 2 - Gong, Rao, Singh, Thomas"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    toc_depth: 2
+  html_document:
+    toc: true
+    toc_depth: '2'
+    df_print: paged
+  word_document:
+    toc: true
+    toc_depth: '2'
+header-includes:
+- \usepackage{tcolorbox}
+- \usepackage{adjustbox}
+- \usepackage{xcolor}
+- \usepackage{booktabs}
+toc-title: Table of Contents
+---
+
+\newpage
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	fig.align = "center",
+	fig.height = 5,
+	fig.width = 7,
+	message = FALSE,
+	warning = FALSE
+)
+
+```
+
+## Introduction
+
+The purpose of this project is to perform **regression diagnosis** on the multiple linear regression model (Model B) estimated in Project 2. Regression diagnosis helps assess whether the assumptions underlying the classical linear regression model hold for our data, ensuring that the model results are valid and reliable.
+
+In this project, we examine potential issues related to **serial correlation**, **heteroscedasticity**, **non-normality**, **multicollinearity**, **functional form misspecification**, and **parameter instability**. Each diagnostic test is conducted at the **5% significance level**, and appropriate **robust estimation techniques** (such as Newey-West or White estimators) are applied when necessary.
+
+## Recap of variable choices and Model B
+
+**Dependent variable**: Unemployment rate (`UNEMP`)  
+**Independent variables**:  
+- S&P500 returns (`SP500`)  
+- Federal Funds Rate (`FEDFUNDS`)  
+- U.S. FDI inflows (`FDI`)  
+- Consumer Price Index (`CPI`)  
+- Industrial Production (`INDPRO`)  
+- Gold prices (`GOLD`)
+
+**Model B**: Multiple Regression Model
+$$
+\begin{aligned}
+\text{UNEMP.FG}_t &= \beta_1 
++ \beta_2 \times \text{SP500.G}_{t-4} 
++ \beta_3 \times \text{FEDFUNDS.G}_{t-4} \\
+&+ \beta_4 \times \text{FDI.G}_{t-4} 
++ \beta_5 \times \text{CPI.G}_{t-4} \\
+&+ \beta_6 \times \text{INDPRO.G}_{t-4} 
++ \beta_7 \times \text{GOLD.G}_{t-4} 
++ u_t
+\end{aligned}
+$$ 
+
+##  Data Management
+This section imports and prepares the datasets for analysis. The same data structure and transformation process as in Project 2 are used to ensure consistency across variables and time periods.
+
+```{r load_libs, echo=TRUE}
+
+# Load Packages
+library(tidyverse)
+library(readr)
+library(knitr)
+library(ggplot2)
+library(zoo)
+library(lubridate)
+library(kableExtra)
+library(lmtest)
+library(sandwich)
+library(broom)
+library(kableExtra)
+library(dplyr)
+library(rlang)
+library(patchwork)
+library(grid)
+library(forecast)
+library(car)
+library(strucchange)
+```
+
+### Data Sources
+**Files**: SP500.csv, FEDFUNDS.csv, FDI.csv, CPI.csv, INDPRO.csv, GOLD.csv, UNRATE.csv  
+**Period**: January 1956 to December 2023  
+**Frequency**: Combination of Monthly and Yearly  
+
+```{r load data, include=FALSE}
+
+#Load data
+sp500_raw<- read_csv("SP500.csv")
+unemp_raw <- read_csv("unemp.csv")
+FEDFUNDS_raw <- read.csv("FEDFUNDS.csv")
+FDI_raw <- read.csv("FDI.csv")
+CPI_raw <- read.csv("CPI.csv")
+INDPRO_raw <- read.csv("INDPRO.csv")
+GOLD_raw <- read.csv("GOLD.csv")
+```
+
+```{r clean-data, echo=TRUE}
+# Data Management
+
+# quarterly data
+FDI <- ts(FDI_raw$FDI, start=c(1952,1), end=c(2024,1), frequency=4)
+
+# monthly data
+sp500 <- ts(sp500_raw$sp500, start=c(1927,12), end=c(2025,9), frequency=12)
+unemp <- ts(unemp_raw$unemp, start=c(1948,1), end=c(2025,8), frequency=12)
+FEDFUNDS <- ts(FEDFUNDS_raw$FEDFUNDS, start=c(1954,7), end=c(2025,9), frequency=12)
+CPI <- ts(CPI_raw$CPI, start=c(1947,1), end=c(2025,8), frequency=12)
+INDPRO <- ts(INDPRO_raw$INDPRO, start=c(1919,1), end=c(2025,8), frequency=12)
+GOLD <- ts(GOLD_raw$GOLD, start=c(1915,1), end=c(2025,10), frequency=12)
+
+# Aggregating data
+
+# --- Step 1: Determine overlapping period ---
+monthly_starts <- sapply(list(sp500, unemp, FEDFUNDS, CPI, INDPRO, GOLD), function(x) start(x)[1] + (start(x)[2]-1)/12)
+monthly_ends   <- sapply(list(sp500, unemp, FEDFUNDS, CPI, INDPRO, GOLD), function(x) end(x)[1] + (end(x)[2]-1)/12)
+quarterly_starts <- start(FDI)[1] + (start(FDI)[2]-1)/4
+quarterly_ends   <- end(FDI)[1] + (end(FDI)[2]-1)/4
+
+overlap_start <- max(c(monthly_starts, quarterly_starts))
+overlap_end   <- min(c(monthly_ends, quarterly_ends))
+
+# Convert back to ts indexing
+start_year <- floor(overlap_start)
+start_month <- round(1 + (overlap_start - start_year) * 12)
+start_quarter <- round(1 + (overlap_start - start_year) * 4)
+
+end_year <- floor(overlap_end)
+end_month <- round(1 + (overlap_end - end_year) * 12)
+end_quarter <- round(1 + (overlap_end - end_year) * 4)
+
+# --- Step 2: Trim all series ---
+sp500     <- window(sp500, start=c(start_year, start_month), end=c(end_year, end_month))
+unemp     <- window(unemp, start=c(start_year, start_month), end=c(end_year, end_month))
+FEDFUNDS  <- window(FEDFUNDS, start=c(start_year, start_month), end=c(end_year, end_month))
+CPI       <- window(CPI, start=c(start_year, start_month), end=c(end_year, end_month))
+INDPRO    <- window(INDPRO, start=c(start_year, start_month), end=c(end_year, end_month))
+GOLD      <- window(GOLD, start=c(start_year, start_month), end=c(end_year, end_month))
+FDI       <- window(FDI, start=c(start_year, start_quarter), end=c(end_year, end_quarter))
+
+
+# --- Step 3: Aggregate monthly to quarterly (keep same names) ---
+sp500    <- aggregate.ts(sp500, mean, nfrequency = 4)
+unemp    <- aggregate.ts(unemp, mean, nfrequency = 4)
+FEDFUNDS <- aggregate.ts(FEDFUNDS, mean, nfrequency = 4)
+CPI      <- aggregate.ts(CPI, mean, nfrequency = 4)
+INDPRO   <- aggregate.ts(INDPRO, mean, nfrequency = 4)
+GOLD     <- aggregate.ts(GOLD, mean, nfrequency = 4)
+
+# FDI is already quarterly and trimmed, no change needed
+
+# Create quarterly dates
+dates <- seq(from = as.Date(paste(start_year, (start_quarter-1)*3+1, "01", sep="-")),
+             by = "quarter",
+             length.out = length(FDI))
+
+
+# --- Predictive variables ---
+
+# Adjust start and end based on overlapping period of your ts
+dates <- seq(
+  from = as.Date(paste(start(unemp)[1], (start(unemp)[2]-1)*3+1, "01", sep="-")),
+  by = "quarter",
+  length.out = length(unemp)
+)
+
+# --- Dependent variable: Next year's unemployment growth rate ---
+UNEMP.FG <- 100 * (log(stats::lag(unemp, 4)) - log(unemp))
+
+# --- Explanatory variables: Past year's growth rates (all % changes) ---
+
+# Industrial Production growth rate
+INDPRO.G <- 100 * (log(INDPRO) - log(stats::lag(INDPRO, -4)))
+
+# CPI growth (inflation rate)
+CPI.G <- 100 * (log(CPI) - log(stats::lag(CPI, -4)))
+
+# Federal Funds Rate growth
+FEDFUNDS.G <- 100 * (log(FEDFUNDS) - log(stats::lag(FEDFUNDS, -4)))
+
+#  S&P500 growth (returns)
+SP500.G <- 100 * (log(sp500) - log(stats::lag(sp500, -4)))
+
+# FDI growth rate
+FDI.G <- 100 * (log(FDI) - log(stats::lag(FDI, -4)))
+
+# Gold price growth rate
+GOLD.G <- 100 * (log(GOLD) - log(stats::lag(GOLD, -4)))
+
+# Put all series into a list
+series_list <- list(
+  sp500 = sp500,
+  SP500.G = SP500.G,
+  FDI = FDI,
+  FDI.G = FDI.G,
+  GOLD = GOLD,
+  GOLD.G = GOLD.G,
+  CPI = CPI,
+  CPI.G = CPI.G,
+  FEDFUNDS = FEDFUNDS,
+  FEDFUNDS.G = FEDFUNDS.G,
+  unemp = unemp,
+  UNEMP.FG = UNEMP.FG,
+  INDPRO.G = INDPRO.G,
+  dates = dates
+)
+
+# Find minimum length
+min_len <- min(sapply(series_list, length))
+
+# Trim all series to same length
+series_list <- lapply(series_list, function(x) tail(x, min_len))
+
+# Create final dataframe
+data_quarterly <- as.data.frame(series_list)
+
+# Remove any remaining NAs
+data_quarterly <- na.omit(data_quarterly)
+
+
+```
+
+\newpage
+
+# 1. Residual Serial Correlation
+
+This section examines whether the residuals of **Model B** from Project 2 are serially correlated. Detecting serial correlation is important because it can lead to biased standard errors and unreliable hypothesis testing. 
+
+```{r MLR, echo=TRUE}
+
+## Equation 2 taken from Project 2
+eqn2.ols <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G, data = data_quarterly)
+res <- eqn2.ols$residuals
+y_hat <- eqn2.ols$fitted.values
+```
+## a. Residual Autocorrelation Plot
+
+The following code chunk uses function `acf` from base R to report the **residual autocorrelations**.
+
+
+```{r autocorrelation plot, echo=TRUE}
+
+# Compute ACF values manually
+acf_res <- acf(res, lag.max = 12, plot = FALSE)
+
+# Convert to data frame for ggplot, excluding lag 0 for coloring
+acf_df <- with(acf_res, data.frame(
+  lag = lag,
+  acf = acf,
+  ci_upper = rep(1.96/sqrt(n.used), length(lag)),
+  ci_lower = rep(-1.96/sqrt(n.used), length(lag))
+)) %>%
+  mutate(color_flag = ifelse(lag == 0, "Lag 0",
+                      ifelse(acf > ci_upper | acf < ci_lower, "Significant", "Not Significant")))
+
+# Plot with colored spikes, CI bounds, and custom x-axis
+ggplot(acf_df, aes(x = lag, y = acf, color = color_flag)) +
+  geom_hline(yintercept = 0, color = "black") +
+  geom_hline(aes(yintercept = ci_upper), linetype = "dashed", color = "gray40") +
+  geom_hline(aes(yintercept = ci_lower), linetype = "dashed", color = "gray40") +
+  geom_segment(aes(xend = lag, yend = 0), size = 1.2) +
+  scale_color_manual(values = c("Significant" = "red", "Not Significant" = "steelblue", "Lag 0" = "steelblue")) +
+  scale_x_continuous(breaks = seq(0, 12, by = 2)) +
+  labs(
+    title = "Autocorrelation Function (ACF) of Residuals",
+    x = "Lag",
+    y = "ACF"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", color = "blue", hjust = 0.5),
+    axis.title.x = element_text(face = "bold", color = "darkblue"),
+    axis.title.y = element_text(face = "bold", color = "darkblue"),
+    legend.position = "none"
+  )
+```
+
+**Interpretation**
+
+In the autocorrelation plot above, the solid vertical lines represent the residual autocorrelations, while the dashed horizontal lines indicate the 95% confidence bounds. 
+
+As shown in the graph, several autocorrelations particularly at **lags 1, 2, and some higher lags (around 8–11)** exceed the 95% confidence bounds. This suggests that the residuals are **serially correlated across multiple periods**, not just at lower lags. The persistence of significant autocorrelations beyond lag 2 implies that shocks to the residuals tend to carry over time.  
+
+Therefore, we can conclude that the **OLS residuals are serially correlated at multiple lag orders**, indicating that the regression errors do **not satisfy the assumption of no serial correlation**. Further testing, such as the **Breusch–Godfrey test**, is necessary to formally assess the extent of serial dependence.
+
+## b. Breusch–Godfrey (BG) Test
+The Breusch–Godfrey (BG) test is conducted to check whether the residuals from Model B are serially correlated. The lag order is set to **11**, based on the autocorrelation plot, which showed significant autocorrelations up to approximately the eleventh lag.
+
+The **BG auxiliary regression** for Model B is given as the following:
+$$
+\begin{aligned}
+\hat{u}_t &= \alpha_1 
++ \alpha_2 \, \text{SP500}_{t-4} 
++ \alpha_3 \, \text{FEDFUNDS}_{t-4} 
++ \alpha_4 \, \text{FDI}_{t-4} \\
+&\quad + \alpha_5 \, \text{CPI}_{t-4} 
++ \alpha_6 \, \text{INDPRO}_{t-4} 
++ \alpha_7 \, \text{GOLD}_{t-4} \\
+&\quad + \rho_1 \hat{u}_{t-1} + \rho_2 \hat{u}_{t-2} + \rho_3 \hat{u}_{t-3} 
++ \rho_4 \hat{u}_{t-4} + \rho_5 \hat{u}_{t-5} + \rho_6 \hat{u}_{t-6} \\
+&\quad + \rho_7 \hat{u}_{t-7} + \rho_8 \hat{u}_{t-8} + \rho_9 \hat{u}_{t-9} 
++ \rho_{10} \hat{u}_{t-10} + \rho_{11} \hat{u}_{t-11} 
++ v_t
+\end{aligned}
+$$
+**Hypothesis**
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!50!black]
+$H_0: \ \rho_1 = \rho_2 = \rho_3 = \rho_4 = \rho_5 = \rho_6 = \rho_7 = \rho_8 = \rho_9 = \rho_{10} = \rho_{11} = 0 \quad$ (No autocorrelation in residuals) \\
+$H_1: \ \text{At least one of } \rho_1, \rho_2, \dots, \rho_{11} \neq 0 \quad$ (Residuals exhibit autocorrelation)
+\end{tcolorbox}
+
+### BG Test
+```{r BG Test, echo=TRUE}
+
+# Run Breusch-Godfrey test
+bg_res <- bgtest(eqn2.ols, order = 11, type = "Chisq")
+
+# Prepare conclusions data frame with test statistic and df
+conclusions <- data.frame(
+  Model = "Multiple Regression Model",
+  `Significance Level` = "5%",
+  `BG Test Statistic` = round(bg_res$statistic, 2),
+  `df` = bg_res$parameter,
+  Decision = ifelse(bg_res$p.value < 0.05, "Reject H0", "Fail to Reject H0"),
+  `p-value` = formatC(bg_res$p.value, format = "e", digits = 2)  # scientific notation
+)
+
+# Display table with kable and kableExtra
+kable(conclusions,
+      caption = "Breusch-Godfrey Test for Autocorrelation (Order 11)",
+      booktabs = TRUE,
+      align = "lccccc",
+      col.names = c("Model", "Significance Level", "BG Test Statistic", "df", "Decision", "p-value")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+```
+
+**Interpretation**
+
+The Breusch–Godfrey test output shows the **p-value of the test is 1.47e-27**. Thus, at the 5% significance level, we reject H0 and conclude that there is significant evidence of autocorrelation in the residuals in line with the autocorrelation plot. This indicates that Model B shows evidence of autocorrelation, and therefore, robust estimation (Newey–West) should be used in the next step.
+
+\newpage
+
+### Newey–West Estimates
+
+Since the Breusch–Godfrey test shows strong evidence of serial correlation (p-value < 0.01), **we apply the Newey–West estimator to correct the standard errors**. This adjustment keeps the coefficients the same but makes the statistical inference more reliable. The following code reports the Newey–West estimates with lag = 11.
+
+```{r NW, echo=TRUE}
+
+# Compute Newey-West robust covariance
+eqn2.nw <- NeweyWest(eqn2.ols, lag = 11)
+nw_res <- coeftest(eqn2.ols, vcov = eqn2.nw)
+
+# Convert results to a tidy data frame
+nw_df <- broom::tidy(nw_res) %>%
+  select(term, estimate, std.error, statistic, p.value) %>%
+  mutate(
+    estimate = round(estimate, 4),
+    `Std. Error` = round(std.error, 4),
+    `t value` = round(statistic, 4),
+    `p-value` = formatC(p.value, format = "e", digits = 2)
+  ) %>%
+  select(term, estimate, `Std. Error`, `t value`, `p-value`)
+
+# Display table
+kable(nw_df,
+      caption = "Newey-West Robust Coefficient Test (Lag 11)",
+      booktabs = TRUE,
+      align = "lcccc",
+      col.names = c("Term", "Estimate", "Std. Error", "t value", "p-value")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+```
+
+```{r OLS vs NW, echo=TRUE}
+# --- Step 1: Compute OLS p-values and round estimates ---
+ols_res <- broom::tidy(eqn2.ols) %>%
+  select(term, estimate, p.value) %>%
+  rename(`pvalue (OLS)` = p.value) %>%
+  mutate(estimate = round(estimate, 4))
+
+# --- Step 2: Compute Newey-West p-values ---
+eqn2.nw <- NeweyWest(eqn2.ols, lag = 11)
+nw_res <- coeftest(eqn2.ols, vcov = eqn2.nw) %>%
+  broom::tidy() %>%
+  select(term, p.value) %>%
+  rename(`pvalue (NW)` = p.value)
+
+# --- Step 3: Combine OLS and NW p-values, check significance change ---
+comparison_df <- ols_res %>%
+  left_join(nw_res, by = "term") %>%
+  mutate(
+    `Change in Decision (95% CI)` = case_when(
+      (`pvalue (OLS)` < 0.05 & `pvalue (NW)` >= 0.05) ~ "Yes",
+      (`pvalue (OLS)` >= 0.05 & `pvalue (NW)` < 0.05) ~ "Yes",
+      TRUE ~ "No"
+    ),
+    `pvalue (OLS)` = formatC(`pvalue (OLS)`, format = "e", digits = 2),
+    `pvalue (NW)` = formatC(`pvalue (NW)`, format = "e", digits = 2)
+  )
+
+# --- Step 4: Display table ---
+kable(comparison_df,
+      caption = "Comparison of OLS and Newey-West p-values",
+      booktabs = TRUE,
+      align = "lccc") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+```
+
+**Interpretation**
+
+After conducting the Breusch-Godfrey test, we confirmed the presence of autocorrelation in the residuals. This implies that the standard OLS p-values may understate the true variability of the estimates, potentially exaggerating their significance. When 
+Newey-West robust standard errors are applied, *which adjust for both autocorrelation and heteroskedasticity*, most slope coefficients retain their original significance decisions, indicating that the estimates for key predictors like FEDFUNDS.G and 
+INDPRO.G remain highly significant. **However, the intercept, which was significant under OLS (p = 0.00147), becomes non-significant under Newey-West (p = 0.211), demonstrating that OLS can overstate significance for coefficients, particularly those near the 5% threshold**. Overall, robust estimation increases p-values for coefficients affected by autocorrelation, but does not materially change the significance conclusions for the main slope predictors in the model.
+
+# 2. Heteroscedasticity
+
+Since the data is time-series and the Breusch–Godfrey (BG) test indicates significant serial correlation (p-value < 0.01), a separate heteroskedasticity analysis is unnecessary, as the Newey–West estimator already adjusts for both autocorrelation and heteroskedasticity.
+
+
+# 3. Normality
+
+## a. Normality of Residuals: QQ Plot
+
+A **QQ (quantile-quantile) plot** visually compares the distribution of residuals to a theoretical normal distribution. If the residuals are approximately normal, the points should lie roughly along the 45-degree blue line.
+
+
+```{r qq-plot, echo=TRUE}
+# Extract residuals from Model B
+residuals_B <- residuals(eqn2.ols)
+
+# Create QQ plot
+qqnorm(residuals_B, main = "QQ Plot of Model B Residuals")
+qqline(residuals_B, col = "blue", lwd = 2)
+```
+
+**Interpretation**
+
+The Q-Q plot shows that the sample quantiles of the data (the small circles) generally follow the theoretical quantiles of a normal distribution (the dotted line) through the center, but deviate noticeably and substantially on both tails. Specifically, the points on the lower tail (below about -1.5) fall significantly below the line, and the points on the upper tail (above about 1.5) are slightly above the line. **This strong deviation at the extremes indicates that the distribution has heavier or longer tails than a pure normal distribution, meaning there are more extreme low and high values than expected, and thus the data do not strictly follow a normal distribution**.
+
+
+
+## b. Histogram of OLS Residuals with Kernel and Normal Density
+
+We examine the distribution of residuals using a histogram overlaid with:
+
+1. **Kernel density estimate**  
+2. **Normal density curve**  
+
+This helps visually assess whether residuals are approximately normally distributed.
+
+```{r residual-histogram, echo=TRUE}
+
+# Extract residuals from Model B
+res <- residuals(eqn2.ols)
+
+# Put residuals in a data frame
+df <- data.frame(res = res)
+
+# Plot histogram with kernel and normal density
+ggplot(df, aes(x = res)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 bins = 15, colour = "black", fill = "grey") +
+  stat_density(geom = "line", aes(colour = "kernel"), size = 1) +
+  stat_function(fun = dnorm, args = list(mean = mean(res), sd = sd(res)),
+                aes(colour = "normal"), size = 1, linetype = "dashed") +
+  scale_colour_manual(name = "", values = c("kernel" = "orange", "normal" = "blue"),
+                      labels = c("Kernel density", "Normal density")) +
+  labs(title = "Histogram of Residuals with Kernel and Normal Density",
+       x = "Residuals", y = "Density") +
+  theme_minimal()
+```
+**Interpretation**
+
+Based on the Histogram of Residuals with Kernel and Normal Density plot, the residuals do not appear to be perfectly normally distributed. *While the distribution is bell-shaped and centered near zero, the actual residual density (solid orange line) is more peaked than the theoretical normal curve (dashed blue line) and shows evidence of heavier tails, particularly on the far left*. This indicates more extreme values (outliers) and a higher concentration of data around the mean than a true normal distribution would exhibit. **This deviation from the dashed blue line suggests the assumption of normally distributed residuals for certain statistical inferences is not strictly met**.
+
+
+## c. Shapiro-Wilk Test
+
+```{r ShapiroW, echo=TRUE}
+# --- Normality Tests ---
+
+# Shapiro–Wilk Test
+
+shapiro_res <- shapiro.test(res)
+
+# --- Create summary table ---
+normality_df <- data.frame(
+  Test = c("Shapiro–Wilk"),
+  Statistic = c(round(shapiro_res$statistic, 4)),
+  `p-value` = c(formatC(shapiro_res$p.value, digits = 6)),
+  Decision = c(ifelse(shapiro_res$p.value < 0.05,
+                      "Reject H0 (Not Normal)",
+                      "Fail to Reject H0 (Normal)"))
+)
+
+# --- Display as styled table ---
+kable(normality_df,
+      caption = "Normality Test for Regression Residuals (Shapiro–Wilk)",
+      booktabs = TRUE,
+      align = "lccc",
+      col.names = c("Test", "Statistic", "p-value", "Decision")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+
+```
+
+**Interpretation**
+
+Given a 95% confidence level, the **Shapiro-Wilk test yielded a Test Statistic (W) of 0.924** and an **extremely small p-value of $6.9053 \times 10^{-10}$**. Since this p-value is significantly smaller than the threshold $\alpha=0.05$, we have overwhelming evidence to reject the null hypothesis ($H_0$) that the residuals are normally distributed. **Therefore, the statistical conclusion is that the regression residuals do not follow a normal distribution, which suggests a violation of one of the classical assumptions for OLS regression inference**.
+
+# 4. Multicollinearity
+```{r multicollinearity, echo=TRUE}
+# Compute Variance Inflation Factors
+vif_res <- vif(eqn2.ols)
+
+# --- Create a data frame ---
+vif_df <- data.frame(
+  Variable = names(vif_res),
+  VIF = round(vif_res, 3),
+  Interpretation = ifelse(vif_res < 5,
+                          "No multicollinearity concern",
+                          "Potential multicollinearity concern")
+)
+
+# --- Display formatted table ---
+kable(vif_df,
+      caption = "Variance Inflation Factor (VIF) for Multicollinearity Diagnostics",
+      booktabs = TRUE,
+      align = "lcc",
+      col.names = c("Variable", "VIF", "Interpretation")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+```
+**Interpretation**
+
+The Variance Inflation Factor (VIF) results indicate that all independent variables have VIF values well below the common threshold of 5, suggesting that multicollinearity is not a concern in this regression model. Each predictor: SP500.G, FEDFUNDS.G, FDI.G, CPI.G, INDPRO.G, and GOLD.G shows minimal correlation with the other explanatory variables, implying that the estimated coefficients are stable and reliable. **Overall, the absence of high VIF values confirms that the model does not suffer from redundancy or inflated standard errors due to multicollinearity**.
+
+# 5. Functional Form 
+
+## a. Ramsey's RESET Test
+The auxiliary regression for the Ramsey's RESET test is specified as:
+
+$$
+\begin{aligned}
+\text{UNEMP.FG}_t &= \beta_1 
++ \beta_2 \, \text{SP500.G}_{t-4} 
++ \beta_3 \, \text{FEDFUNDS.G}_{t-4} 
++ \beta_4 \, \text{FDI.G}_{t-4} \\
+&\quad + \beta_5 \, \text{CPI.G}_{t-4} 
++ \beta_6 \, \text{INDPRO.G}_{t-4} 
++ \beta_7 \, \text{GOLD.G}_{t-4} \\
+&\quad + \gamma_1 \hat{y}_t^2 + \gamma_2 \hat{y}_t^3 + v_t
+\end{aligned}
+$$
+**Hypothesis**
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!50!black]
+$H_0: \ \gamma_1 = \gamma_2 = 0 \quad$ (Model functional form is correctly specified) \\
+$H_1: \ \text{At least one of } \gamma_1 \text{ or } \gamma_2 \neq 0 \quad$ (Model functional form is misspecified)
+\end{tcolorbox}
+
+
+```{r Wald Test, echo=TRUE}
+
+# --- Step 1: Prepare auxiliary data ---
+
+reset.data <- cbind(eqn2.ols$model, y_hat)
+
+# --- Step 2: Auxiliary regression with powers of fitted values ---
+
+reset.aux.ols <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G
++ I(y_hat^2) + I(y_hat^3),
+data = reset.data)
+
+# --- Step 3: Newey-West robust covariance for auxiliary regression ---
+
+reset.aux.nw <- NeweyWest(reset.aux.ols, lag = 11)
+
+# --- Step 4: Wald test ---
+
+reset_wald <- waldtest(eqn2.ols, reset.aux.ols, test = "Chisq", vcov = reset.aux.nw)
+
+# --- Step 5: Convert results to tidy table ---
+
+reset_table <- data.frame(
+Test = "Ramsey RESET (Wald Test)",
+`Chi-Sq_Statistic` = round(reset_wald$Chisq[2], 3),
+df = reset_wald$Df[2],
+`p_value` = formatC(reset_wald$`Pr(>Chisq)`[2], digits = 6),
+Decision = ifelse(reset_wald$`Pr(>Chisq)`[2] < 0.05, "Reject H0", "Fail to Reject H0")
+)
+
+# --- Step 6: Display table ---
+
+kable(reset_table,
+caption = "Ramsey RESET Test for Functional Form (Lag 11)",
+booktabs = TRUE,
+align = "lcccc") %>%
+kable_styling(latex_options = c("HOLD_position", "striped"),
+stripe_color = "blue!5!white",
+position = "center") %>%
+row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+
+```
+
+**Interpretation**
+
+The Ramsey RESET test for functional form (lag 11) yielded a Chi-Sq statistic of 14.63 with *2 degrees of freedom* and a *p-value of 0.00067*. Since the p-value is well below 0.05, we reject the null hypothesis that the model's functional form is correctly specified. **This indicates strong evidence of functional form misspecification, suggesting that the linear combination of the current independent variables may not fully capture the relationship with unemployment growth, and that including non-linear terms or transformations could improve the model fit**.
+
+\newpage
+## b. Robustness of Ramsey's RESET Test
+
+```{r WT Robustness, echo=TRUE}
+
+# --- Step 1: Prepare auxiliary data ---
+reset.data <- cbind(eqn2.ols$model, y_hat)
+
+# --- Step 2a: Auxiliary regression with powers 2 and 3 ---
+reset.aux.2_3 <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G
+                    + I(y_hat^2) + I(y_hat^3),
+                    data = reset.data)
+
+# --- Step 2b: Auxiliary regression with powers 2, 3, and 4 ---
+reset.aux.2_3_4 <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G
+                      + I(y_hat^2) + I(y_hat^3) + I(y_hat^4),
+                      data = reset.data)
+
+# --- Step 3: Newey-West robust covariance ---
+reset.nw.2_3 <- NeweyWest(reset.aux.2_3, lag = 11)
+reset.nw.2_3_4 <- NeweyWest(reset.aux.2_3_4, lag = 11)
+
+# --- Step 4: Wald tests ---
+wald_2_3 <- waldtest(eqn2.ols, reset.aux.2_3, test = "Chisq", vcov = reset.nw.2_3)
+wald_2_3_4 <- waldtest(eqn2.ols, reset.aux.2_3_4, test = "Chisq", vcov = reset.nw.2_3_4)
+
+# --- Step 5: Convert results to tidy table ---
+reset_table_robust <- data.frame(
+  Test = c("RESET Power 2 & 3", "RESET Power 2, 3 & 4"),
+  Chi_Sq_Statistic = round(c(wald_2_3$Chisq[2], wald_2_3_4$Chisq[2]), 3),
+  df = c(wald_2_3$Df[2], wald_2_3_4$Df[2]),
+  p_value = formatC(c(wald_2_3$`Pr(>Chisq)`[2], wald_2_3_4$`Pr(>Chisq)`[2]), digits = 6),
+  Decision = ifelse(c(wald_2_3$`Pr(>Chisq)`[2], wald_2_3_4$`Pr(>Chisq)`[2]) < 0.05, "Reject H0", "Fail to Reject H0")
+)
+
+# --- Step 6: Display table ---
+kable(reset_table_robust,
+      caption = "Ramsey RESET Test Robustness (Lag 11)",
+      booktabs = TRUE,
+      align = "lcccc") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+```
+
+\newpage
+**Interpretation**
+
+As higher powers are added to the Ramsey RESET test, the test becomes more stringent, capturing additional potential nonlinearities in the model. **In this case, including powers 2 and 3 already leads to rejection of the null, and adding power 4 further increases the Wald statistic and lowers the p-value, reinforcing the conclusion**. This indicates that the model’s functional form misspecification is robust to higher-order terms i.e. the evidence for misspecification strengthens rather than weakens as more powers are included.
+
+
+# 6. Parameter Stability
+
+## a. CUSUM Test
+
+```{r CUSUM Test, echo=TRUE}
+# CUSUM Test
+cusum <- efp(eqn2.ols, data = data_quarterly)
+plot(cusum, alpha = 0.05,
+     main = "CUSUM Test for Parameter Stability",
+     sub = "Recursive residuals with 5% significance bounds",
+     col = "steelblue",           # color of CUSUM line
+     lwd = 2,                     # line width
+     lty = 1,                     # solid line
+     border = "darkblue",         # border color for shaded area
+     xlab = "Observation",        # x-axis label
+     ylab = "CUSUM",              # y-axis label
+)
+```
+
+**Interpretation**
+
+The CUSUM statistic crosses the confidence bounds, indicating that the regression coefficients are not stable over time.
+This suggests structural changes in the unemployment–macro relationship, especially around major economic events.
+
+
+
+## b. Sample Split
+We split the sample at 2008Q1, corresponding to the onset of the U.S. Subprime Mortgage Crisis, which subsequently triggered the Global Financial Crisis (GFC). This period led to major dislocations in U.S. labor markets, monetary policy, risk-asset valuations, foreign investment flows, and industrial output;  all key predictors in our model.
+
+```{r Sample Split, echo=TRUE}
+break_2008 <- which(data_quarterly$dates >= as.Date("2008-01-01"))[1]
+n_pre <- break_2008 - 1
+n_post <- nrow(data_quarterly) - break_2008
+
+sample_table <- data.frame(
+  Period = c("Pre-2008Q1", "Post-2008Q1"),
+  Observations = c(n_pre, n_post)
+)
+kable(sample_table,
+      caption = "Sample Size Before and After 2008Q1 Split",
+      booktabs = TRUE,
+      align = "lc",
+      col.names = c("Sub-Sample", "Number of Observations")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+```
+
+
+
+Both sub-samples contain more than 30 observations (187 pre-crisis and 57 post-crisis), satisfying the minimum requirement for the Chow structural break test. Therefore, we proceed with the formal Chow test instead of the predictive failure test.
+
+## c. Chow Structural Break Test
+
+The auxiliary regression for the Chow's Structural Break test is specified as:
+
+$$
+\begin{aligned}
+\text{UNEMP.FG}_t = \beta_1 + \beta_2 \text{SP500.G}_t + \beta_3 \text{FEDFUNDS.G}_t + \beta_4 \text{FDI.G}_t + \beta_5 \text{CPI.G}_t + \beta_6 \text{INDPRO.G}_t + \beta_7 \text{GOLD.G}_t \\
++ \alpha_1 D_{t} + \alpha_2 (D_{t} \cdot \text{SP500.G}_t) + \alpha_3 (D_{t} \cdot \text{FEDFUNDS.G}_t) + \alpha_4 (D_{t} \cdot \text{FDI.G}_t) \\
++ \alpha_5 (D_{t} \cdot \text{CPI.G}_t) + \alpha_6 (D_{t} \cdot \text{INDPRO.G}_t) + \alpha_7 (D_{t} \cdot \text{GOLD.G}_t) + v_t
+\end{aligned}
+$$
+
+**Hypothesis**
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!50!black]
+$H_0: \ \alpha_2 = \alpha_3 = \alpha_4 = \alpha_5 = \alpha_6 = \alpha_7 = 0 \quad$ (No structural break; slopes are stable pre- and post-crisis) \\
+$H_1: \ \text{At least one of } \alpha_2, \alpha_3, \dots, \alpha_7 \neq 0 \quad$ (Structural break exists; slopes change after crisis)
+\end{tcolorbox}
+
+
+
+Because serial correlation was detected earlier, the Wald test based on Newey–West robust covariance is preferred over the classical Chow F-test, which assumes homoskedastic and uncorrelated errors.
+\newpage
+```{r Chow Structural BreakTest with NW, echo=TRUE}
+# Create crisis dummy
+data_quarterly$D_2008 <- ifelse(data_quarterly$dates >= as.Date("2008-01-01"), 1, 0)
+
+# Unrestricted model with interactions
+eq_full <- lm(UNEMP.FG ~ D_2008*(SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G),
+              data = data_quarterly)
+
+# Restricted model (no break)
+eq_rest <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G,
+              data = data_quarterly)
+
+# Newey-West Wald test for structural break
+nw_coef <- coeftest(eq_full, vcov = NeweyWest(eq_full))
+nw_coef_df <- data.frame(
+  Estimate = round(nw_coef[,1], 4),
+  `Std. Error` = round(nw_coef[,2], 4),
+  `t value` = round(nw_coef[,3], 3),
+  `p_value` = formatC(nw_coef[,4], format="e", digits=3)
+)
+
+kable(nw_coef_df, caption = "Newey–West Robust Coefficients (Unrestricted Model)",
+      booktabs = TRUE, align = "lccccc") %>%
+  kable_styling(latex_options = c("HOLD_position","striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+wald_res <- waldtest(eq_rest, eq_full, vcov = NeweyWest(eq_full), test = "Chisq")
+
+# Extract key values
+wald_stat <- round(wald_res$Chisq[2], 3)
+wald_df   <- wald_res$Df[2]
+wald_pval <- formatC(wald_res$`Pr(>Chisq)`[2], digits=4, format="e")
+
+# Decision
+decision <- ifelse(wald_res$`Pr(>Chisq)`[2] < 0.05, "Reject H0", "Fail to Reject H0")
+
+# Output table to match group format
+chow_wald_table <- data.frame(
+  BreakPoint = "2008Q1",
+  Test = "Robust Wald (Newey-West)",
+  Chi_Sq = wald_stat,
+  df = wald_df,
+  p_value = wald_pval,
+  Decision = decision
+)
+
+kable(chow_wald_table,
+      caption = "Wald Structural Break Test at 2008Q1 (Newey–West Robust)",
+      booktabs = TRUE,
+      align = "lccccc") %>%
+  kable_styling(latex_options = c("HOLD_position","striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+```
+
+**Interpretation**  
+The Newey–West robust Wald test produces a highly significant Chi-square statistic with a p-value < 0.001. Therefore, at the 5% significance level, we reject the null hypothesis. **This confirms the presence of a structural break around 2008Q1, indicating that the relationship between unemployment and macro-financial variables shifted substantially during the U.S. Subprime Mortgage Crisis period**.
+
+
+**Conclusion**  
+Evidence from the CUSUM stability test and the robust Wald structural break test at the 2008Q1 break-point consistently indicates parameter instability in the unemployment model. **This suggests that the unemployment–macro relationship is regime-dependent, with structural changes occurring during major economic disruptions**. 
+
+
+
+## d. Chow Predictive Failure Test
+The COVID-19 pandemic represents a significant macroeconomic shock that likely altered U.S. unemployment dynamics and financial relationships. However, the post-2020 sample contains fewer than 30 quarterly observations, which makes the standard Chow structural break test invalid due to insufficient post-event sample size.
+
+Following the Project 3 instructions, when the post-event sample is small, we instead apply the Chow Predictive Failure Test, which evaluates whether the model estimated on the pre-COVID period continues to predict accurately during the post-COVID period. This allows us to assess whether forecast errors increased significantly under pandemic conditions, indicating structural instability.
+
+```{r Chow Predictive Failiure, echo=TRUE}
+# Step 1: Define COVID split date
+covid.date <- as.Date("2020-01-01")  # approximate start of COVID impact
+
+# Step 2: Extended sample regression (full data)
+eqn2.ols.ext <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G,
+                   data = data_quarterly)
+rss.full <- sum(eqn2.ols.ext$residuals^2)
+
+# Step 3: Pre-COVID sample regression
+data.pre.covid <- subset(data_quarterly, dates < covid.date)
+eqn2.ols.pre <- lm(UNEMP.FG ~ SP500.G + FEDFUNDS.G + FDI.G + CPI.G + INDPRO.G + GOLD.G,
+                   data = data.pre.covid)
+rss.pre <- sum(eqn2.ols.pre$residuals^2)
+
+# Step 4: Compute predictive failure Chow F-statistic
+T  <- nrow(data_quarterly)        # total observations
+T1 <- nrow(data.pre.covid)        # pre-COVID observations
+T2 <- T - T1                      # post-COVID observations
+k  <- eqn2.ols.pre$rank           # number of estimated parameters
+
+chow.pf <- ((rss.full - rss.pre) / T2) / (rss.pre / (T1 - k))
+p.value <- pf(chow.pf, T2, T1 - k, lower.tail = FALSE)
+
+# Step 5: Display results in a table with scientific notation for p-value
+chow_pf_table <- data.frame(
+  `F_stat` = round(chow.pf, 4),
+  `df1_post-COVID` = T2,
+  `df2_pre-COVID` = T1 - k,
+  `p_value` = formatC(p.value, format = "e", digits = 6),
+  Decision = ifelse(p.value < 0.05, "Reject H0", "Fail to Reject H0")
+)
+
+kable(chow_pf_table,
+      caption = "Chow Predictive Failure Test: Pre vs Post-COVID",
+      booktabs = TRUE,
+      align = "c") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+```
+
+\newpage
+**Interpretation**
+
+The Chow Predictive Failure Test compares the stability of the regression model for the pre-COVID and post-COVID periods. The computed F-statistic is 14.46 with 16 and 222 degrees of freedom for the post-COVID and pre-COVID periods, respectively. The associated p-value is extremely small (1.954530e-26), well below the 5% significance level. This provides strong evidence to reject the null hypothesis of parameter stability, indicating that the relationship between the predictors and UNEMP.FG changed significantly after the onset of COVID-19. **In other words, the model estimated on the pre-COVID period does not predict post-COVID unemployment dynamics accurately, highlighting a structural shift in the data**.
+
+# 7. Conclusion
+
+1. **Model Diagnostics Summary**: The regression diagnostics revealed that the OLS residuals exhibit significant serial correlation and departures from normality.
+
+2. **Model Specification and Stability**: The Ramsey RESET test (p = 0.00067) indicates functional-form misspecification, suggesting the current linear specification does not fully capture unemployment growth dynamics. This result strengthens with higher-order terms, reinforcing the need for nonlinear adjustments. However, VIF values below 5 show no major multicollinearity concerns, supporting stable coefficient estimates.
+
+**Overall Assessment**
+
+After correcting for autocorrelation and heteroscedasticity using Newey–West robust standard errors, the main explanatory variables retained their significance, suggesting that Model B provides statistically reliable and economically meaningful insights into unemployment dynamics. However, evidence of functional-form misspecification indicates that nonlinear adjustments may further improve model fit.

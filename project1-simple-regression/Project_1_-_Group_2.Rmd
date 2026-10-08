@@ -1,0 +1,696 @@
+---
+title: "ECON622 Project 1: Simple Linear Regression"
+subtitle: "S&P 500 Returns and US Unemployment rate"
+author: "Group 2 - Gong, Rao, Singh, Thomas"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    toc_depth: 2
+header-includes:
+  - \usepackage{tcolorbox}
+toc-title: "Table of Contents"
+---
+
+\newpage
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	fig.align = "center",
+	fig.height = 5,
+	fig.width = 7,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# 1. Introduction
+
+This study examines how S&P 500 stock returns (X) affect US Monthly unemployment rate (Y) from January 1948 to August 2025.
+
+## a. Variable Choice
+
+**Y variable**: Monthly unemployment rate (unemp)  
+**X variable**: S&P 500 returns (sp500)
+
+We use unemployment as a continuous macro indicator of labor market slack. Market levels are forward-looking; using lagged S&P 500 helps test whether past market conditions are associated with next month's unemployment.
+
+**Time Period**: Jan 1949 to August 2025 (75.6 years)
+
+**Why this period**:
+
+The time period from January 1949 to August 2025 (75.6 years) provides a uniquely comprehensive view of the U.S. economy and financial markets. It spans multiple economic cycles, including major recessions such as the dot-com crash (2001), the global financial crisis (2008–2009), and the COVID-19 pandemic (2020) with COVID serving as a particularly interesting case study of how sudden shocks impact both stock performance and unemployment. Covering more than three-quarters of a century, the dataset delivers a large sample size of 900+ monthly observations, which strengthens statistical reliability. Importantly, it combines both historical depth and modern market dynamics, making the findings relevant for understanding long-term relationships while still reflecting contemporary economic behavior.
+
+**Project Plan**: This is project 1 with simple regression ($Y_t = \alpha + \beta X_t + \varepsilon_t$). Project 2 will add more variables.
+
+## b. Literature Review
+
+The relationship between economic cycles and stock market returns has been extensively studied in both theoretical and empirical literature.
+
+### **Theoretical Foundation:**
+Financial market theory suggests that stock prices incorporate forward-looking information about economic conditions. Stock market declines often precede economic recessions as investors anticipate deteriorating corporate earnings, reduced consumer spending, and tightening credit conditions. The wealth effect and confidence channels provide theoretical mechanisms through which stock market performance influences broader economic activity and Monthly unemployment rate.
+
+### **Empirical Evidence:**
+
+Green A, et al. (2024)\textsuperscript{[\hyperlink{ref3}{3}]}, in their study “Identifying Economic Factors Affecting Unemployment Rates”, examined nearly two decades of U.S. data to understand how macroeconomic indicators influence labor market conditions. Using regression analysis, they found that the S&P 500 index is negatively correlated with the unemployment rate, meaning that periods of strong stock market performance are typically accompanied by lower unemployment.
+
+This relationship highlights the role of the stock market as a forward-looking indicator of economic health. Rising S&P 500 returns often reflect improved corporate profitability and investment, which translates into greater hiring and job creation. Conversely, a declining stock market signals weaker business conditions, reduced investment, and ultimately higher unemployment rates.
+
+#### **COVID-19 Period as a Case Study:**
+
+The COVID-19 pandemic period (2020-2021) represents a particularly interesting case within our sample. Unlike typical recessions driven by financial or economic imbalances, the COVID-19 recession was caused by an external public health crisis that led to unprecedented government-mandated economic shutdowns.
+
+
+# 2. Data 
+
+```{r load-libs, echo=TRUE}
+library(tidyverse)
+library(readr)
+library(knitr)
+library(ggplot2)
+library(zoo)
+library(lubridate)
+library(kableExtra)
+```
+
+## a. Data Sources
+
+**Files**: SP500.csv and UNRATE.csv  
+**Period**: January 1948 to August 2025  
+**Frequency**: Monthly
+
+**Variables**:
+ `sp500`: S&P 500 returns (X variable)
+ `unemp`: Monthly unemployment rate (Y variable)
+
+```{r load-data, echo=TRUE}
+# Load data
+sp500_raw <- read_csv("SP500.csv")
+unemp_raw <- read_csv("UNRATE.csv")
+```
+
+```{r clean-data, echo=TRUE}
+# --- Original cleaning ---
+names(sp500_raw)[1] <- "date"
+names(sp500_raw)[2] <- "sp500"
+names(unemp_raw)[1] <- "date"
+names(unemp_raw)[2] <- "unemp"
+
+sp500_raw$date <- as.Date(lubridate::parse_date_time(
+  sp500_raw$date,
+  orders = c("mdy","ymd","dmy","Y-m","m-Y","b-Y","Y-b","m/Y","Y/m","bY","Yb")
+))
+unemp_raw$date <- as.Date(lubridate::parse_date_time(
+  unemp_raw$date,
+  orders = c("ymd","dmy","Y-m","m-Y","b-Y","Y-b","m/Y","Y/m","bY","Yb")
+))
+
+start_date <- as.Date("1948-01-01")
+max_date   <- as.Date("2025-08-01")
+sp500_raw  <- sp500_raw[sp500_raw$date >= start_date, ]
+unemp_raw  <- unemp_raw[unemp_raw$date >= start_date, ]
+
+sp500_raw$ym <- zoo::as.yearmon(sp500_raw$date)
+unemp_raw$ym <- zoo::as.yearmon(unemp_raw$date)
+
+sp500_m <- sp500_raw |>
+  dplyr::arrange(date) |>
+  dplyr::group_by(ym) |>
+  dplyr::slice_tail(n = 1) |>
+  dplyr::ungroup() |>
+  dplyr::select(ym, sp500)
+
+unemp_m <- unemp_raw |>
+  dplyr::arrange(date) |>
+  dplyr::group_by(ym) |>
+  dplyr::slice_tail(n = 1) |>
+  dplyr::ungroup() |>
+  dplyr::select(ym, unemp)
+
+# --- Build combined dataset for modeling ---
+data <- dplyr::inner_join(sp500_m, unemp_m, by = "ym") |>
+  dplyr::mutate(date = as.Date(ym)) |>
+  dplyr::filter(date <= max_date)
+
+to_num <- function(x) {
+  x <- as.character(x)
+  x <- gsub(",", "", x)
+  suppressWarnings(as.numeric(x))
+}
+data$sp500 <- to_num(data$sp500)   # S\\&P 500 level
+data$unemp <- to_num(data$unemp)   # Unemployment rate
+
+# --- Predictive variables ---
+data <- data |>
+  dplyr::arrange(date) |>
+  dplyr::mutate(
+    # Next year's changes (dependent vars)
+    unemp_FG = 100 * (log(dplyr::lead(unemp, 12)) - log(unemp)),   # unemployment forward growth
+    sp500_FG = (dplyr::lead(sp500, 12) - sp500) / sp500 * 100,     # forward 12m return (%)
+
+    # Past year's changes (predictors)
+    unemp_G  = 100 * (log(unemp) - log(dplyr::lag(unemp, 12))),    
+    sp500_G  = (sp500 - dplyr::lag(sp500, 12)) / dplyr::lag(sp500, 12) * 100, 
+
+    # COVID dummy
+    covid = as.integer(date >= as.Date("2020-03-01") & date <= as.Date("2021-06-30"))
+  )
+
+# Drop NAs
+data <- stats::na.omit(data)
+
+# Quick check
+cat("Rows after processing:", nrow(data),
+    "| First:", format(min(data$date)),
+    "| Last:", format(max(data$date)), "\n")
+```
+
+## b. Data Descriptions
+
+In this project, we analyze a linear regression model with Unemployment Rate (dependent variable) and S&P 500 Returns (regressor). All data used in the analysis are obtained from public sources.
+
+The details are given below:
+
+**unemp (Y)**: The civilian unemployment rate measures the percentage of the labor force that is unemployed but actively seeking work. High unemployment is often associated with recessions, making it a useful proxy for economic downturns. The data are obtained from FRED\textsuperscript{[\hyperlink{ref1}{1}]}. Frequency: monthly. Units: Percent (%).
+
+**sp500 (X)**: Monthly values of the S&P 500 index, sourced from Yahoo Finance\textsuperscript{[\hyperlink{ref2}{2}]} The sample period captures major economic cycles. Units are index points, presented as a time series.
+
+**Lag Structure and Rationale**:
+
+A 12-month lag is applied to the S&P 500 returns and unemployment variables to build a forward-looking predictive model. This approach allows us to analyze how past stock market and labor market changes influence future unemployment outcomes one year ahead, reflecting the notion that financial markets often anticipate economic conditions before they appear in employment data.
+
+During processing, observations with missing values resulting from the lagging and leading calculations were removed. Specifically:
+
+The first 12 months of the dataset were dropped because lagged values of S&P 500 and unemployment could not be computed.
+
+The last 12 months were dropped because forward-looking growth variables (unemp_FG and sp500_FG) could not be calculated.
+
+This ensures that all remaining observations have complete data for both predictors and dependent variables, resulting in a clean and consistent dataset suitable for regression analysis.
+
+**Sample Information**
+
+**Sample size**: `r nrow(data)` observations  
+**Period**: `r format(min(data$date), "%b %Y")` to `r format(max(data$date), "%b %Y")`  
+**COVID observations**: `r sum(data$covid)` (`r round(sum(data$covid)/nrow(data)*100, 1)`% of sample)
+\newpage
+**Descriptive Statistics**
+
+```{r descriptive-stats, echo=TRUE}
+# Select relevant variables
+DATA <- data[, c("unemp", "sp500")]  # Y first, X second
+
+# Summary statistics table
+stats_table <- data.frame(
+  Variable = c("Monthly Unemployment Rate (Y)", "S&P 500 Returns (X)"),
+  Min = round(c(min(DATA$unemp), min(DATA$sp500)), 4),
+  "1st Qu." = round(c(quantile(DATA$unemp, 0.25), quantile(DATA$sp500, 0.25)), 4),
+  Median = round(c(median(DATA$unemp), median(DATA$sp500)), 4),
+  Mean = round(c(mean(DATA$unemp), mean(DATA$sp500)), 4),
+  "3rd Qu." = round(c(quantile(DATA$unemp, 0.75), quantile(DATA$sp500, 0.75)), 4),
+  Max = round(c(max(DATA$unemp), max(DATA$sp500)), 4),
+  SD = round(c(sd(DATA$unemp), sd(DATA$sp500)), 4)
+)
+
+# Fix column names to remove X prefix
+colnames(stats_table) <- c("Variable", "Min", "1st Qu.", "Median", "Mean", "3rd Qu.", "Max", "SD")
+
+# Correlation
+cor_table <- round(cor(DATA), 4)
+rownames(cor_table) <- c("Monthly Unemployment Rate (Y)", "S&P 500 Returns (X)")
+colnames(cor_table) <- c("Monthly Unemployment Rate (Y)", "S&P 500 Returns (X)")
+
+# Display statistics table with styling
+kable(stats_table,
+      caption = "Summary Statistics for Monthly Unemployment Rate and S\\&P 500 Returns \\label{tab:descriptive-stats1}",
+      booktabs = TRUE,
+      escape = FALSE,
+      align = "lcccc") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                font_size = 11,
+                full_width = FALSE,
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+# Display correlation table with styling
+kable(cor_table,
+      caption = "Correlation Matrix between Monthly Unemployment Rate and S\\&P 500 Returns \\label{tab:correlation}",
+      booktabs = TRUE,
+      escape = FALSE,
+      align = "cc") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"),
+                font_size = 11,
+                full_width = FALSE,
+                stripe_color = "blue!5!white",
+                position = "center") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+```
+
+
+## c. Plots
+
+```{r time-plots, echo=TRUE, fig.width=7, fig.height=5}
+# S\\&P 500 with COVID highlighting - matching your title
+ggplot(data, aes(x = date, y = sp500)) +
+  geom_rect(
+    data = data.frame(xmin = as.Date("2020-03-01"), xmax = as.Date("2021-06-30")),
+    aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
+    inherit.aes = FALSE, fill = "red", alpha = 0.08
+  ) +
+  geom_line(color = "darkgreen", linewidth = 0.6) +
+  labs(title = "S&P 500 Return Over Time", x = "Date", y = "S&P 500 Return") +
+  theme_minimal()
+
+# Unemployment with COVID highlighting - matching your title
+ggplot(data, aes(x = date, y = unemp)) +
+  geom_rect(
+    data = data.frame(xmin = as.Date("2020-03-01"), xmax = as.Date("2021-06-30")),
+    aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
+    inherit.aes = FALSE, fill = "red", alpha = 0.08
+  ) +
+  geom_line(color = "blue", linewidth = 0.6) +
+  labs(title = "Monthly Unemployment Rate Over Time", x = "Date", y = "Unemployment Rate (%)") +
+  theme_minimal()
+
+# Scatter plot with COVID highlighting - reflecting 12-month lag approach
+ggplot(data, aes(x = sp500, y = unemp)) +
+  geom_point(aes(color = factor(covid)), alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  scale_color_manual(values = c("blue", "orange"),
+                     labels = c("Normal", "COVID"),
+                     name = "Period") +
+  labs(title = "Unemployment Rate vs S&P 500 Returns",
+       x = "S&P 500 Returns",
+       y = "Unemployment Rate (%)") +
+  theme_minimal()
+```  
+
+
+### Analysis of statistical summary and scatter plot
+
+The dataset focuses on the **Unemployment Rate (Y) and S&P 500 Returns (X)** as the primary variables. The unemployment rate ranges from 2.5% to 14.8%, with a mean of 5.72% and a standard deviation of 1.71%. This indicates generally moderate unemployment, punctuated by sharp increases during recessionary periods. S&P 500 monthly returns vary widely, from 14.16 to 5,648.40, with a mean of 814.87 and a standard deviation of 1,122.96. The median (247.22) is much lower than the mean, showing high variability and a strongly right-skewed distribution.
+
+**The correlation between the two variables is -0.1672, pointing to a weak negative linear relationship**. In practical terms, higher unemployment is modestly associated with lower stock returns, though the link is not strong.
+
+The scatter plot of unemployment versus S&P 500 returns shows a loosely downward-sloping trend, consistent with the weak negative correlation but lacking a strong linear pattern. Time series plots align with typical macroeconomic cycles: unemployment rises during downturns and declines in recoveries, while stock returns fluctuate more sharply with market conditions. **Notable anomalies appear during extreme events—such as the COVID-19 pandemic—where unemployment spiked and stock returns dropped dramatically, creating visible outliers in both plots. The enhanced visualizations now clearly highlight the COVID period with red shaded regions and orange points in the scatter plot**.
+
+Overall, both the summary statistics and visuals suggest a weak inverse relationship between stock market performance and labor market conditions, with occasional extreme deviations during crisis periods.
+
+# 3. Interpretation of the fitted regression 
+
+## a. OLS Estimation
+### Estimations
+```{r OLS, echo=TRUE}
+# Fit simple linear regression
+eqn1.sp500.ols <- lm(unemp ~ sp500, data = data)
+sum_model <- summary(eqn1.sp500.ols)
+
+# Coefficients table
+coef_table <- data.frame(
+  Parameter = rownames(sum_model$coefficients),
+  Estimate = sum_model$coefficients[, "Estimate"],
+  Std_Error = sum_model$coefficients[, "Std. Error"],
+  t_value = sum_model$coefficients[, "t value"],
+  p_value = sum_model$coefficients[, "Pr(>|t|)"],
+  row.names = NULL
+)
+
+# Overall regression statistics table
+stats_table <- data.frame(
+  Statistic = c("Residual Std. Error", "Multiple R-squared", "Adjusted R-squared",
+                "F-statistic", "DF", "Overall p-value"),
+  Value = c(
+    round(sum_model$sigma, 4),
+    round(sum_model$r.squared, 4),
+    round(sum_model$adj.r.squared, 4),
+    round(sum_model$fstatistic[1], 4),
+    paste0(round(sum_model$fstatistic[2],0), ", ", round(sum_model$fstatistic[3],0)),
+    round(pf(sum_model$fstatistic[1], sum_model$fstatistic[2], sum_model$fstatistic[3], lower.tail = FALSE), 4)
+  )
+)
+
+# Display coefficients table with label (Table 3)
+kable(coef_table,
+      caption = "OLS Regression Coefficients for unemp regressed on sp500 \\label{tab:ols-coef}",
+      booktabs = TRUE,
+      escape = FALSE,
+      align = "lcccc",
+) %>%
+  kable_styling(
+    latex_options = c("HOLD_position", "striped"),
+    font_size = 11,
+    full_width = FALSE,
+    stripe_color = "blue!5!white",
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+
+# Display overall statistics table with label (Table 4)
+kable(stats_table,
+      caption = "Overall Regression Statistics for unemp regressed on sp500 \\label{tab:ols-stats}",
+      booktabs = TRUE,
+      escape = FALSE,
+      align = "lcccc"
+) %>%
+  kable_styling(
+    latex_options = c("HOLD_position", "striped"),
+    font_size = 11,
+    full_width = FALSE,
+    stripe_color = "gray!10!white",
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+``` 
+
+**Regression Equation:**
+
+$$\text{unemp}_t = \beta_0 + \beta_1 \times \text{sp500}_{t-1} + u_t$$
+
+### Comparison to Theoretical and Empirical Evidence  
+
+The estimated slope coefficient for S&P 500 returns is -0.000254 with a standard error of 0.0000498, resulting in a t-value of -5.104 and a p-value of \(4 \times 10^{-7}\)
+
+**The negative sign of the coefficient indicates that higher S&P 500 returns are associated with lower unemployment, aligning with financial market theory**. According to theory, stock prices incorporate forward-looking information about economic conditions. A rising stock market reflects expectations of stronger corporate earnings, higher consumer spending, and easier credit conditions, all of which encourage firms to maintain or expand hiring. Conversely, declines in stock market performance often precede recessions, signaling weaker earnings, lower demand, and tightening financial conditions, which in turn drive unemployment higher.
+
+This theoretical perspective is consistent with empirical evidence. Green A, et al. (2024)\textsuperscript{[\hyperlink{ref3}{3}]}, in their study “Identifying Economic Factors Affecting Unemployment Rates”, analyzed nearly two decades of U.S. data and found a negative correlation between the S&P 500 index and unemployment. **Their results show that strong stock market performance is typically accompanied by lower unemployment, as higher returns reflect greater business confidence and investment, translating into job creation**. While the slope coefficient in this model (-0.000254) indicates only a small effect size, its statistical significance (p < 0.000001) reinforces the conclusion that stock market performance and unemployment are inversely related.
+
+**Sign and Size of the Slope Coefficient**: The slope coefficient is negative, showing that higher S&P 500 returns are linked to lower unemployment. The magnitude (-0.000254) suggests that a 1-point increase in the S&P 500 index is associated with a 0.000254 percentage point decrease in the unemployment rate. While the effect is small in size, it is **statistically significant**, reinforcing evidence of an inverse relationship between stock market performance and unemployment.
+
+**Statistical significance**: The slope is **highly statistically significant (p < 0.000001)**, confirming that this negative relationship is unlikely to have occurred by chance.
+
+## b. R-Squared
+
+In simple linear regression, the \(R^2\) measures the proportion of variation in unemployment explained by S&P 500 returns. Here, the \(R^2\) is 0.028 (adjusted \(R^2 = 0.0269\)), meaning that stock market returns account for only about 2.8% of the variation in unemployment.
+
+The correlation coefficient can be expressed as:
+
+\[
+r = \sqrt{R^2} = \sqrt{0.028} \approx -0.167
+\]
+
+This indicates a **weak negative correlation** between S&P 500 returns and unemployment, consistent with the negative slope coefficient.
+
+**Conclusion**:
+*The negative and statistically significant slope supports both theoretical and empirical evidence that higher stock market returns tend to coincide with lower unemployment. However, the low \(R^2\) shows that the model explains only a small portion of unemployment variation, suggesting that other macroeconomic factors play a larger role.*
+
+## c. Prediction and Expected Change in Y
+
+```{r prediction_table, echo=TRUE}
+# Regression coefficients
+beta0 <- coef(eqn1.sp500.ols)[1]
+beta1 <- coef(eqn1.sp500.ols)[2]
+
+# Summary stats for S\\&P 500
+sp500_mean <- mean(data$sp500, na.rm = TRUE)
+sp500_Q1   <- quantile(data$sp500, 0.25, na.rm = TRUE)
+sp500_Q3   <- quantile(data$sp500, 0.75, na.rm = TRUE)
+
+# Predictions
+pred_mean <- beta0 + beta1 * sp500_mean
+delta_Y   <- beta1 * (sp500_Q3 - sp500_Q1)
+
+# Table
+pred_table <- data.frame(
+  Scenario = c("Predicted Y at Mean(X)",
+               "Expected Change in Y (Q1 → Q3)"),
+  "X Values" = c(
+    paste0("Mean = ", round(sp500_mean, 2)),
+    paste0("Q1 = ", round(sp500_Q1, 2), " ; Q3 = ", round(sp500_Q3, 2))
+  ),
+  Result = c(round(pred_mean, 3), round(delta_Y, 3)),
+  stringsAsFactors = FALSE
+)
+
+# Nicely formatted table
+kable(pred_table, caption = "Predicted Values and Expected Changes in Y",
+      booktabs = TRUE, escape = FALSE, align = "lcc") %>%
+  kable_styling(
+    latex_options = c("HOLD_position", "striped", "scale_down"),
+    font_size = 10,
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  column_spec(1, width = "6cm") %>%
+  column_spec(2, width = "6cm") %>%
+  column_spec(3, width = "3cm") %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+```
+
+\begin{equation}
+\hat{Y}_{mean} = \beta_0 + \beta_1 \bar{X}
+\end{equation}
+
+\begin{equation}
+\Delta \hat{Y} = \beta_1 \left( X_{Q3} - X_{Q1} \right)
+\end{equation}
+
+\newpage
+
+# 4. Hypothesis Testing
+
+## a.	Mathematical equation of the simple linear regression
+
+\begin{equation} \label{eq1}
+\Delta \text{unemp}_t = \beta_0 + \beta_1 \Delta \text{sp500}_t + \varepsilon_t
+\end{equation}
+
+
+## b. Perform a t-test on the slope coefficient
+
+*Step 1*: Hypotheses
+
+Based on theory and empirical evidence:
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!50!black,title=Hypotheses]
+$H_0: \ \beta = 0 \quad$ (S\&P 500 returns have no effect on unemployment) \\
+$H_1: \ \beta \neq 0 \quad$ (S\&P 500 returns affect unemployment)
+\end{tcolorbox}
+
+
+This is a **two-sided test** because we are checking for any effect (positive or negative), not just one direction.
+
+*Step 2*: t-statistic and p-value in R
+
+```{r, tstat and pvalue, echo=TRUE}
+
+# Extract t-statistic and p-value
+t_stat <- summary(eqn1.sp500.ols)$coefficients["sp500", "t value"]
+p_value <- summary(eqn1.sp500.ols)$coefficients["sp500", "Pr(>|t|)"]
+df <- df.residual(eqn1.sp500.ols)
+
+# Create table for (b)
+t_table <- data.frame(
+  Parameter = "S&P 500 slope",
+  t_statistic = round(t_stat, 4),
+  df = df,
+  p_value = signif(p_value, 4)
+)
+
+# Display
+library(knitr)
+library(kableExtra)
+kable(t_table,
+      caption = "t-Statistic and p-Value for S\\&P500 Slope \\label{tab:t-test}",
+      booktabs = TRUE,
+      escape = FALSE,
+      align = "lcc"
+) %>%
+  kable_styling(
+    latex_options = c("HOLD_position", "striped"),
+    font_size = 11,
+    full_width = FALSE,
+    stripe_color = "gray!10!white",
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+
+```
+
+**Interpretation**:
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!50!black,title=Decision Rule]
+Reject $H_0$ if $; |t_{stat}| > t_{crit} ;$, otherwise fail to reject $H_0$.
+\end{tcolorbox}
+
+## c. Critical values and conclusion
+
+*Step 1*: Two-sided critical values
+
+```{r critical value, echo=TRUE}
+# Two-sided critical values
+t_crit_1 <- qt(0.995, df)   # 1% two-sided
+t_crit_5 <- qt(0.975, df)   # 5% two-sided
+t_crit_10 <- qt(0.95, df)   # 10% two-sided
+
+# Decision based on critical values
+decision_crit_1 <- ifelse(abs(t_stat) > t_crit_1, "Reject H0", "Fail to reject H0")
+decision_crit_5 <- ifelse(abs(t_stat) > t_crit_5, "Reject H0", "Fail to reject H0")
+decision_crit_10 <- ifelse(abs(t_stat) > t_crit_10, "Reject H0", "Fail to reject H0")
+
+# Table for (c)
+crit_table <- data.frame(
+  Significance_Level = c("1%", "5%", "10%"),
+  Critical_t = round(c(t_crit_1, t_crit_5, t_crit_10), 4),
+  t_statistic = rep(round(t_stat,4),3),
+  Decision = c(decision_crit_1, decision_crit_5, decision_crit_10)
+)
+
+# Display table
+kable(crit_table,
+      caption = "Decision Using Critical t-Values \\label{tab:crit-t}",
+      booktabs = TRUE,
+      escape = FALSE,
+      align = "lcc"
+) %>%
+  kable_styling(
+    latex_options = c("HOLD_position", "striped"),
+    font_size = 11,
+    full_width = FALSE,
+    stripe_color = "gray!10!white",
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+
+```
+
+**Interpretation**
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!50!black,title=Decision Rule]
+At each significance level (1\%, 5\%, 10\%), compare $|t_{stat}|$ with the corresponding $t_{crit}$. \\
+Reject $H_0$ if $|t_{stat}| > t_{crit}$, otherwise fail to reject $H_0$.
+\end{tcolorbox}
+
+\newpage
+
+## d. p-value and conclusion
+
+```{r pvalue conclusion, echo=TRUE}
+decision_p1 <- ifelse(p_value < 0.01, "Reject H0", "Fail to reject H0")
+decision_p5 <- ifelse(p_value < 0.05, "Reject H0", "Fail to reject H0")
+decision_p10 <- ifelse(p_value < 0.10, "Reject H0", "Fail to reject H0")
+
+# Table for (d)
+p_table <- data.frame(
+  Significance_Level = c("1%", "5%", "10%"),
+  p_value = signif(p_value,4),
+  Decision = c(decision_p1, decision_p5, decision_p10)
+)
+
+# Display table
+kable(p_table,
+      caption = "Decision Using p-Value \\label{tab:p-value}",
+      booktabs = TRUE,
+      escape = FALSE,
+      align = "lcc"
+) %>%
+  kable_styling(
+    latex_options = c("HOLD_position", "striped"),
+    font_size = 11,
+    full_width = FALSE,
+    stripe_color = "gray!10!white",
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+
+```
+
+**Interpretation**
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!50!black,title=Decision Rule]
+Reject $H_0$ if the $p$-value is less than the chosen significance level ($\alpha = 0.01, 0.05, 0.10$).
+Otherwise, fail to reject $H_0$.
+\end{tcolorbox}
+
+
+
+# 5. Confidence Intervals
+## a. Values
+```{r confidence_intervals, echo=TRUE}
+# Compute slope estimate and SE
+beta1 <- coef(eqn1.sp500.ols)["sp500"]
+se_beta1 <- summary(eqn1.sp500.ols)$coefficients["sp500", "Std. Error"]
+df <- df.residual(eqn1.sp500.ols)
+
+# Confidence levels
+conf_levels <- c(0.99, 0.95, 0.90)
+
+# Function to compute CI
+ci <- function(beta, se, df, conf) {
+  t_crit <- qt((1 + conf)/2, df)
+  lower <- beta - t_crit * se
+  upper <- beta + t_crit * se
+  return(c(lower, upper))
+}
+
+# Compute all CIs as a matrix (rows = lower/upper, cols = confidence levels)
+cis <- sapply(conf_levels, function(conf) ci(beta1, se_beta1, df, conf))
+cis <- matrix(cis, nrow = 2, byrow = FALSE,
+              dimnames = list(c("Lower Bound", "Upper Bound"),
+                              paste0(conf_levels*100, "%")))
+
+# Build CI table without extra column
+conf_table <- data.frame(
+  "Lower Bound" = round(cis[1, ], 8),
+  "Upper Bound" = round(cis[2, ], 8),
+  row.names = colnames(cis)
+)
+
+# Nicely formatted table
+kable(conf_table,
+      caption = "Confidence Intervals for S\\&P 500 Slope \\label{tab:ci-slope}",
+      booktabs = TRUE,
+      escape = FALSE,
+      align = "lcc"
+) %>%
+  kable_styling(
+    latex_options = c("HOLD_position", "striped"),
+    font_size = 11,
+    full_width = FALSE,
+    stripe_color = "gray!10!white",
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, background = "blue!50!black", color = "white")
+
+```
+
+## b. Conclusion
+
+*Since $\beta$ = 0 does not lie within the 99%, 95%, or 90% confidence intervals, we reject the null hypothesis $H_0$ at all three significance levels.* 
+
+*This result is consistent with the earlier t-test conclusion.*
+
+---
+\newpage
+# 6. Final Conclusion
+
+This analysis examined the relationship between S&P 500 returns and US unemployment rates using monthly data from 1948 to 2025. Key findings include:
+
+1. **Statistical Significance**: The relationship is highly statistically significant at all conventional levels (p < 0.001).
+
+2. **Economic Magnitude**: The negative coefficient indicates that higher S&P 500 returns are associated with lower unemployment rates, consistent with economic theory.
+
+3. **Model Fit**: The simple linear regression explains `r round(summary(eqn1.sp500.ols)$r.squared * 100, 1)`% of the variation in unemployment rates, indicating a modest but statistically significant relationship.
+
+4. **COVID-19 Impact**: The enhanced visualizations clearly show the extreme volatility during the COVID-19 period, with red shaded regions highlighting this unprecedented economic disruption and orange points in the scatter plot showing the outlier nature of these observations.
+
+**Methodological Notes**: This analysis demonstrates the importance of proper data visualization in econometric analysis. The COVID-19 period represents a unique natural experiment that tests the robustness of traditional economic relationships during extreme circumstances.
+
+This baseline relationship provides the foundation for Project 2, where additional explanatory variables will be incorporated to improve the model's explanatory power and control for potential confounding factors.
+
+
+\newpage
+# References
+
+\hypertarget{ref1}{}[1] **Federal Reserve Bank of St. Louis - FRED**. *Unemployment Rate (UNRATE)*. St. Louis Fed. 2025. Available at: <https://fred.stlouisfed.org/series/UNRATE>  
+
+\hypertarget{ref2}{}[2] **Yahoo Finance**. *S&P 500 (^GSPC) — Historical Monthly Prices*. 2025. Available at: <https://finance.yahoo.com/quote/%5EGSPC/history/?frequency=1mo>  
+
+\hypertarget{ref3}{}[3] **Green A, et al.** *Identifying Economic Factors Affecting Unemployment Rates.* arXiv. 2024:2411.02374. Available at: <https://arxiv.org/abs/2411.02374>
