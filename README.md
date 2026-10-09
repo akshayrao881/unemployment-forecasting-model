@@ -80,9 +80,9 @@ R ≥ 4.2 with a LaTeX install (xelatex).
 install.packages(c("tidyverse","readr","knitr","ggplot2","zoo","lubridate",
   "kableExtra","lmtest","sandwich","broom","dplyr","rlang","patchwork",
   "forecast","car","strucchange"))
-rmarkdown::render("project1-simple-regression/Project_1_-_Group_2.Rmd")
-rmarkdown::render("project2-multiple-regression/Project_2_-_Group_2.Rmd")
-rmarkdown::render("project3-diagnostics/Project_3_-_Group_2.Rmd")
+rmarkdown::render("project1-simple-regression/simple_regression.Rmd")
+rmarkdown::render("project2-multiple-regression/multiple_regression.Rmd")
+rmarkdown::render("project3-diagnostics/regression_diagnostics.Rmd")
 ```
 Render each file from inside its own folder (or set the working directory there) so the CSVs are found.
 
